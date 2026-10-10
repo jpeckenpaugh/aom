@@ -455,7 +455,7 @@ class Game:
 
     def run(self):
         while self.running:
-            dt = self.clock.tick(self.browser_fps_cap) / 1000
+            dt = self.clock.tick(effective_fps(self.browser_fps_cap)) / 1000
             self.last_dt = dt
             self.handle_events()
             self.update(dt)
@@ -465,7 +465,7 @@ class Game:
 
     async def run_async(self):
         while self.running:
-            dt = self.clock.tick(self.browser_fps_cap) / 1000
+            dt = self.clock.tick(effective_fps(self.browser_fps_cap)) / 1000
             self.last_dt = dt
             self.handle_events()
             self.update(dt)
