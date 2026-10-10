@@ -115,6 +115,7 @@ GAME_OPTIONS_ROWS = (
     "TOOLS",
     "Debug Overlay",
     "About",
+    "Auto Win",
     "SYSTEM",
     "End Game",
     *BACK_OPTIONS_ROWS,
@@ -274,3 +275,105 @@ MUSHROOM_ASPECT_PROFILES = {
 
 RADIAL_GLOW_CACHE = {}
 ELLIPTICAL_RING_CACHE = {}
+
+# ===== v0.2 PROGRESSION (see docs/v0.2-spec.md Section 1) =====
+MAX_CIVS = 3
+LEVELS_PER_CIV = 5
+ASCENSION_REQUIRED_LEVEL = LEVELS_PER_CIV
+PRESTIGE_UNLOCK_CIVS_AT_ASCENSIONS = 1     # first ascension unlocks civs #2 & #3
+ASCENSION_ECHO_REWARD = 1
+ASCENSION_ECHO_CAP = 15
+CYCLE_DIFFICULTY_STEP = 0.10               # +10% enemy power per Cycle
+
+CIV_ORDER = ("amanita", "entoloma", "mycena_glow")   # unlock order; amanita ships first
+CIV_DEFS = {
+    "amanita":     {"name": "Amanita Wardens",      "aspect": "wide",    "style": "Amanita",     "affinity": "spore_hearth"},
+    "entoloma":    {"name": "Entoloma Decomposers", "aspect": "neutral", "style": "Entoloma",    "affinity": "decomposer_terrace"},
+    "mycena_glow": {"name": "Mycena Glowweavers",   "aspect": "tall",    "style": "Mycena Glow", "affinity": "elemental_ley_ring"},
+}
+
+# ===== v0.2 CLASSES (see Section 2.2) =====
+CLASSES = ("forager", "vanguard", "chanter")
+CLASS_UNLOCK_LEVEL = {"forager": 1, "vanguard": 3, "chanter": 4}
+CLASS_STATS = {
+    "forager":  {"atk": 4,  "hp": 20, "speed": 1.20, "gather": 1.00},
+    "vanguard": {"atk": 8,  "hp": 60, "speed": 0.80, "gather": 0.40},
+    "chanter":  {"atk": 12, "hp": 18, "speed": 1.00, "gather": 0.50},
+}
+CIV_CLASS_MODS = {   # (hp_mult, atk_mult, gather_mult)
+    "amanita":     {"forager": (1.00, 1.00, 1.00), "vanguard": (1.15, 1.10, 1.00), "chanter": (1.00, 1.00, 1.00)},
+    "entoloma":    {"forager": (1.15, 1.00, 1.25), "vanguard": (0.95, 0.95, 1.00), "chanter": (0.90, 0.90, 1.00)},
+    "mycena_glow": {"forager": (1.00, 1.00, 0.90), "vanguard": (0.90, 0.90, 1.00), "chanter": (1.00, 1.20, 1.00)},
+}
+CIV_CLASS_NAMES = {   # cosmetic role names per civ (Section 2.2)
+    "amanita":     {"forager": "Gillbearer",   "vanguard": "Capguard",   "chanter": "Earthchanter"},
+    "entoloma":    {"forager": "Composter",    "vanguard": "Bulwark",    "chanter": "Sporewright"},
+    "mycena_glow": {"forager": "Glimmerkin",   "vanguard": "Wardflame",  "chanter": "Lumensinger"},
+}
+
+# ===== v0.2 COMBAT (auto-resolve, see Section 3) =====
+COMBAT_AUTO_RESOLVE = True
+COMBAT_RNG_SEED = 1337
+COMBAT_NOISE = 0.10            # set 0.0 in tests for a fully deterministic outcome
+COMBAT_WIN_THRESHOLD = 0.5
+WINNER_LOSS_COEF = 0.15
+WINNER_LOSS_MAX = 0.45
+LOSER_LOSS_BASE = 0.60
+LOSER_LOSS_MAX = 1.00
+FACTION_STAT_MULT = 1.0
+VETERANCY_BONUS = 0.10         # +10% power per veterancy rank
+TERRAIN_MULT = {"open": 1.10, "farmland": 1.10, "ley": 1.10}   # applies to matching role
+TERRAIN_ROLE = {"open": "vanguard", "farmland": "forager", "ley": "chanter"}
+ENCOUNTER_AUTO_RESOLVE_SECONDS = 3.0   # delay before a pending encounter self-resolves
+AUTO_WIN_DEFAULT = False       # testing affordance, TOOLS/Options + F10
+
+# ===== v0.2 ELEMENTS (see Section 6) =====
+ELEMENT_MECHANICS = {
+    "earth": "root", "water": "heal", "air": "knockback",
+    "fire": "burn", "light": "reveal",
+}
+COUNTERS = {"fire": "water", "water": "earth", "earth": "air",
+            "air": "fire", "light": None}
+ELEMENT_ADVANTAGE_MULT = 1.25
+ELEMENT_DISADVANTAGE_MULT = 0.80
+
+# ===== v0.2 BUILDINGS (ids only; cost/effect tables in economy.py, Section 5.1) =====
+BUILDINGS = ("spore_hearth", "decomposer_terrace", "hyphal_barracks",
+             "mycowatch_spire", "spore_library", "chitin_works",
+             "wellspring_works", "spore_bazaar", "elemental_ley_ring",
+             "symbiosis_bower")
+BUILDING_UNLOCK_LEVEL = {
+    "spore_hearth": 1, "decomposer_terrace": 1, "hyphal_barracks": 2,
+    "mycowatch_spire": 2, "spore_library": 3, "chitin_works": 3,
+    "wellspring_works": 4, "spore_bazaar": 4, "elemental_ley_ring": 5,
+    "symbiosis_bower": 5,
+}
+
+# ===== v0.2 RESOURCES (see Section 4) =====
+RESOURCES = ("lumen", "root", "shell", "crystal", "acorn", "amber")
+RESOURCE_NAMES = {
+    "lumen": "Lumen", "root": "Root Token", "shell": "Glass Shell",
+    "crystal": "Crystal", "acorn": "Acorn", "amber": "Amber Shard",
+}
+RESOURCE_CAPS = {"lumen": 120, "root": 80, "shell": 60,
+                 "crystal": 60, "acorn": 80, "amber": 40}
+RESOURCE_START = {key: 0 for key in RESOURCES}
+RESOURCE_ICON_ASSETS = {
+    "lumen": "hud/lumen.png", "root": "hud/root_icon.png",
+    "shell": "hud/glass_snail_shell.png", "crystal": "hud/quartz_crystal.png",
+    "acorn": "hud/acorn.png", "amber": "hud/amber_shard.png",
+}
+
+# Faucet rates (units/second unless noted)
+GROVE_LUMEN_RATE = 0.50        # Ley Ring L1 passive
+FARM_ACORN_RATE = 0.20         # Decomposer Terrace L1 passive
+LIBRARY_CRYSTAL_RATE = 0.10    # Spore Library L1 passive
+SPIRE_ROOT_INTERVAL = 60.0     # 1 Root per 60s while a foe is visible
+COMBAT_SHELL_REWARD_MULT = 1.0
+BAZAAR_AMBER_RATE = 0.15       # Spore Bazaar L1 passive
+
+# Drain rates
+BUILDING_UPKEEP_LUMEN = {"spore_hearth": 0.05, "decomposer_terrace": 0.05,
+                         "hyphal_barracks": 0.10, "mycowatch_spire": 0.08}
+POP_ACORN_UPKEEP_PER_UNIT = 0.01   # acorn/s per living unit
+SPELL_LUMEN_COST = 2               # per elemental cast

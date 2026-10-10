@@ -722,6 +722,9 @@ class NPCManager(GameBackedManager):
     def cast_elemental_spell(self, origin, direction, waypoint, caster_npc=None):
         if waypoint.charge < 1.0:
             return
+        resources = getattr(self, "resources", None)
+        if resources is not None:
+            resources.add("lumen", -SPELL_LUMEN_COST)
         direction = pygame.Vector2(direction)
         if direction.length_squared() == 0:
             direction = pygame.Vector2(1, 0)

@@ -168,6 +168,10 @@ class UIManager(GameBackedManager):
             self.debug_overlay = not self.debug_overlay
         elif label == "About":
             self.open_about()
+        elif label == "Auto Win":
+            self.auto_win_enabled = not self.auto_win_enabled
+            if self.auto_win_enabled:
+                self.force_win_current_encounter()
         elif label == "End Game":
             self.request_confirmation("end_game")
         elif label == "Close":
@@ -199,6 +203,8 @@ class UIManager(GameBackedManager):
             return str(effective_fps(self.browser_fps_cap))
         if label == "Debug Overlay":
             return "On" if self.debug_overlay else "Off"
+        if label == "Auto Win":
+            return "On" if self.auto_win_enabled else "Off"
         return ""
     def option_display_value(self, label):
         value = self.option_value(label)
@@ -210,6 +216,7 @@ class UIManager(GameBackedManager):
             "Preset": "Apply a full performance and graphics configuration.",
             "Auto Play": "Choose automation speed for helpful player tasks.",
             "Debug Overlay": "Show frame timing and render diagnostics.",
+            "Auto Win": "Force every encounter to resolve as a win (testing affordance).",
             "Sprite Style": "Choose a mushroom species or visual style for sprites.",
             "Darkness Overlay": "Toggle the cave darkness lighting layer.",
             "Smooth Scaling": "Use smoother scaling for browser and framebuffer output.",

@@ -256,6 +256,9 @@ class InputHandler(GameBackedManager):
                 elif event.key == pygame.K_F4:
                     self.note_manual_activity(stop_auto=False)
                     self.cycle_render_profile()
+                elif event.key == pygame.K_F10:
+                    self.note_manual_activity(stop_auto=False)
+                    self.force_win_current_encounter()
                 elif event.key == pygame.K_c:
                     self.note_manual_activity()
                     self.cheat_advance_phase()

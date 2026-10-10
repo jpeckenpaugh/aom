@@ -10,6 +10,19 @@ from autoguide import AutoGuide
 from camera import Camera
 from config import *
 from entities import *
+from economy import (
+    BUILDING_COST,
+    CLASSES,
+    Army,
+    GameProgress,
+    ResourceState,
+    advance_level,
+    building_unlocked,
+    encounter_for_level,
+    make_encounter,
+    net_resource_rates,
+    resolve_encounter,
+)
 from input import InputHandler
 from npcs import NPCManager
 from phases import PhaseManager
@@ -26,6 +39,16 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED)
         pygame.display.set_caption("Age of Mycology")
         self.clock = pygame.time.Clock()
+        # v0.2 economy + progression state (docs/v0.2-spec.md Section 7).
+        self.resources = ResourceState()
+        self.progress = GameProgress()
+        self.auto_win_enabled = AUTO_WIN_DEFAULT
+        self.pending_encounter = None
+        self.encounter_timer = 0.0
+        self.encounter_cooldown = 0.0
+        self.last_encounter_result = None
+        self.encounters_won = 0
+        self.completed_encounters = set()
         self.font_cache = {}
         self.title_texture_cache = {}
         self.assets = AssetManager(self)
@@ -104,12 +127,8 @@ class Game:
         self.leaf_decals = self.assets.make_leaf_decals()
         self.leaf_quest_lumens = []
         self.lumens = self.make_lumens()
-        self.lumen_count = 0
-        self.root_count = 0
-        self.shell_count = 0
-        self.crystal_count = 0
-        self.acorn_count = 0
-        self.amber_count = 0
+        # lumen_count/root_count/shell_count/crystal_count/acorn_count/amber_count
+        # are properties backed by self.resources (see their definitions below).
         self.mycelial_lumen_ready_time = 0.0
         self.growth_state = 0
         self.phase = "explore"
@@ -315,6 +334,155 @@ class Game:
         self.item_drawer_open = False
         return True
 
+    # --- v0.2 resource counters, backed by self.resources ------------------
+    # Rendering and Auto Play still read ``self.<name>_count``; these properties
+    # keep the six HUD counters and the economy state from drifting apart.
+    def _counter_property(key):
+        def getter(instance):
+            return instance.resources.get(key)
+
+        def setter(instance, value):
+            instance.resources.amounts[key] = max(0, min(RESOURCE_CAPS[key], value))
+            return value
+
+        return property(getter, setter)
+
+    lumen_count = _counter_property("lumen")
+    root_count = _counter_property("root")
+    shell_count = _counter_property("shell")
+    crystal_count = _counter_property("crystal")
+    acorn_count = _counter_property("acorn")
+    amber_count = _counter_property("amber")
+    del _counter_property
+
+    # --- v0.2 progression, economy, and auto-resolve combat ---------------
+    def current_civ(self):
+        return self.progress.active_state()
+
+    def current_level(self):
+        return self.current_civ().level
+
+    def resource_rates(self):
+        civ = self.current_civ()
+        return net_resource_rates(
+            civ.civ_id,
+            civ.built,
+            living_units=len(self.npc_mushrooms),
+            cycle=self.progress.cycle,
+        )
+
+    def update_economy(self, dt):
+        self.resources.tick(dt, self.resource_rates())
+        if self.encounter_cooldown > 0.0:
+            self.encounter_cooldown = max(0.0, self.encounter_cooldown - dt)
+        if self.pending_encounter is not None:
+            self.encounter_timer -= dt
+            if self.encounter_timer <= 0.0:
+                self.resolve_pending_encounter()
+        self.try_advance_level()
+
+    def build(self, building_id):
+        civ = self.current_civ()
+        if building_id not in BUILDING_COST or not building_unlocked(building_id, civ.level):
+            return False
+        if civ.built.get(building_id):
+            return False
+        if not self.resources.spend_cost(BUILDING_COST[building_id]):
+            return False
+        civ.built[building_id] = 1
+        return True
+
+    def player_army(self):
+        civ = self.current_civ()
+        army = Army(civ.civ_id)
+        roles = [role for role in CLASSES if role in civ.unlocked_roles] or ["forager"]
+        living = max(1, len(self.npc_mushrooms))
+        elements = [name for name, _ in ELEMENTS]
+        for index, role in enumerate(roles):
+            army.add(role, elements[index % len(elements)], 1 + living // len(roles))
+        return army
+
+    def elements_trained(self):
+        return all(
+            self.elemental_cast_counts.get(element, 0) >= SPELL_CASTS_PER_LEVEL
+            for element, _ in ELEMENTS
+        )
+
+    def regen_colonies_complete(self):
+        waypoints = [waypoint for _, _, waypoint in self.all_stone_waypoints() if waypoint.occupied_by is not None]
+        return bool(waypoints) and all(waypoint.regen_offsets for waypoint in waypoints)
+
+    def completed_level_capstone(self):
+        level = self.current_level()
+        if level <= 1:
+            return (
+                self.lumen_count >= REQUIRED_LUMEN
+                and bool(self.leaf_decals)
+                and all(leaf.connected for leaf in self.leaf_decals)
+            )
+        if level == 2:
+            return bool(self.pebble_waypoints) and all(
+                waypoint.occupied_by is not None for waypoint in self.pebble_waypoints
+            )
+        if level == 3:
+            return self.collect_pebbles_02_complete and self.collect_ferns_03_complete
+        if level == 4:
+            return self.charge_stones_04_complete and self.elements_trained()
+        return self.regen_colonies_complete() and "boss_5" in self.completed_encounters
+
+    def try_advance_level(self):
+        if not self.completed_level_capstone():
+            return False
+        if not advance_level(self.progress, True):
+            return False
+        self.maybe_start_level_encounter()
+        return True
+
+    def maybe_start_level_encounter(self):
+        if self.pending_encounter is not None or self.encounter_cooldown > 0.0:
+            return None
+        encounter_id = encounter_for_level(self.current_level())
+        if not encounter_id or encounter_id in self.completed_encounters:
+            return None
+        encounter = make_encounter(encounter_id, cycle=self.progress.cycle)
+        if encounter is None:
+            return None
+        self.pending_encounter = encounter
+        if self.auto_win_enabled:
+            self.resolve_pending_encounter(auto_win=True)
+        else:
+            self.encounter_timer = ENCOUNTER_AUTO_RESOLVE_SECONDS
+        return encounter
+
+    def resolve_pending_encounter(self, auto_win=None):
+        encounter = self.pending_encounter
+        if encounter is None:
+            return None
+        if auto_win is None:
+            auto_win = self.auto_win_enabled
+        result = resolve_encounter(
+            self.player_army(),
+            encounter,
+            auto_win=auto_win,
+            rng=random.Random(COMBAT_RNG_SEED),
+        )
+        self.pending_encounter = None
+        self.encounter_timer = 0.0
+        self.last_encounter_result = result
+        if result["win"]:
+            self.completed_encounters.add(encounter.id)
+            self.encounters_won += 1
+            self.resources.grant(result["reward"])
+        else:
+            self.encounter_cooldown = ENCOUNTER_AUTO_RESOLVE_SECONDS
+        return result
+
+    def force_win_current_encounter(self):
+        if self.pending_encounter is None:
+            self.encounter_cooldown = 0.0
+            self.maybe_start_level_encounter()
+        return self.resolve_pending_encounter(auto_win=True)
+
 
 
 
@@ -339,12 +507,14 @@ class Game:
         self.npc_mushrooms = []
         self.player.sprite_variant = "neutral"
         self.lumens = self.make_lumens()
-        self.lumen_count = 0
-        self.root_count = 0
-        self.shell_count = 0
-        self.crystal_count = 0
-        self.acorn_count = 0
-        self.amber_count = 0
+        self.resources = ResourceState()
+        self.progress = GameProgress()
+        self.pending_encounter = None
+        self.encounter_timer = 0.0
+        self.encounter_cooldown = 0.0
+        self.last_encounter_result = None
+        self.encounters_won = 0
+        self.completed_encounters = set()
         self.mycelial_lumen_ready_time = 0.0
         self.growth_state = 0
         self.phase = "explore"
@@ -622,6 +792,7 @@ class Game:
             self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
             return
         self.world_time += dt
+        self.update_economy(dt)
         if self.guidance_active():
             self.update_guidance_word(dt)
             self.concentrating = False
