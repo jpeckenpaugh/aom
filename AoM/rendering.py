@@ -8,6 +8,11 @@ from game_backed import GameBackedManager
 from utils import *
 
 
+def format_resource_amount(count):
+    """Format an inventory count for HUD display, rounded to one decimal place."""
+    return f"{float(count):.1f}"
+
+
 def lumen_rotated_surface(src, time, phase_offset=0):
     base = (360 * math.sin(time * 0.12 + phase_offset) + 240 * math.sin(time * 0.07 + phase_offset * 1.7) + 160 * math.sin(time * 0.19 + phase_offset * 0.3))
     drift = 280 * math.sin(time * 0.17 + 0.5 + phase_offset)
@@ -1169,7 +1174,7 @@ class Renderer(GameBackedManager):
         panel.blit(title_shadow, title_shadow.get_rect(topleft=(rect.left + 2, rect.top + 2)))
         panel.blit(title, title.get_rect(topleft=rect.topleft))
 
-        count_text = self.font.render(f"Count: {count}", True, MYCELIUM_FAINT)
+        count_text = self.font.render(f"Count: {format_resource_amount(count)}", True, MYCELIUM_FAINT)
         panel.blit(count_text, count_text.get_rect(topleft=(rect.left, rect.top + 48)))
 
         lines = self.wrap_text(data["description"], self.small_font, rect.width)
@@ -1179,7 +1184,7 @@ class Renderer(GameBackedManager):
             panel.blit(text, (rect.left, y))
             y += 24
     def draw_resource_count(self, panel, count, midleft, max_right=None):
-        value = str(count)
+        value = format_resource_amount(count)
         font = self.font
         if max_right is not None and midleft[0] + font.size(value)[0] > max_right:
             font = self.small_font
