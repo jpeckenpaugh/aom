@@ -299,8 +299,14 @@ class UIManager(GameBackedManager):
         self.confirm_payload = payload
         self.confirm_selected = 1
     def cancel_confirmation(self):
+        action = self.confirm_action
         self.confirm_action = None
         self.confirm_payload = None
+        if action == "build":
+            # Cancelling a build confirm abandons placement (no spend) and
+            # returns the player to the sheet (Section 9.1.4).
+            self.cancel_placement()
+            self.open_build_menu()
     def confirm_current_action(self):
         action = self.confirm_action
         payload = self.confirm_payload
@@ -313,6 +319,12 @@ class UIManager(GameBackedManager):
             self.running = False
         elif action == "framebuffer_reload":
             self.apply_framebuffer_reload(payload or self.framebuffer_key)
+        elif action == "build":
+            payload = payload or {}
+            building_id = payload.get("building_id")
+            if building_id and not self.commit_build(building_id, payload.get("pos")):
+                # Race / now-unaffordable: never silently spend or fail.
+                self.open_build_menu()
     def start_end_game_transition(self):
         self.options_open = False
         self.end_game_fade_active = True

@@ -238,6 +238,26 @@ class AssetManager(GameBackedManager):
         if not frame_dir.exists():
             return []
         return [pygame.image.load(path).convert_alpha() for path in sorted(frame_dir.glob("*.png"))]
+    def load_building_decal(self, building_id):
+        """Load the world decal for a placed building (Section 9.1.2).
+
+        Reuses already-present sprites; a missing/misnamed asset degrades to
+        ``None`` (null-object) so placement still succeeds headlessly.
+        """
+        cache = self.__dict__.setdefault("building_decal_cache", {})
+        if building_id in cache:
+            return cache[building_id]
+        asset_path = BUILDING_DECAL_ASSETS.get(building_id)
+        image = None
+        if asset_path:
+            path = BASE_DIR / "assets" / asset_path
+            if path.exists():
+                try:
+                    image = pygame.image.load(path).convert_alpha()
+                except pygame.error:
+                    image = None
+        cache[building_id] = image
+        return image
     def make_edge_pebbles(self):
         if not self.pebble_sprites:
             return []

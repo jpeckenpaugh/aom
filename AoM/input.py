@@ -90,6 +90,8 @@ class InputHandler(GameBackedManager):
     def handle_game_click(self, pos):
         if self.options_open:
             return False
+        if self.handle_build_click(pos):
+            return True
         if self.item_drawer_visible:
             return self.handle_item_drawer_click(pos)
         if self._handle_pagination_click(pos):
@@ -129,6 +131,81 @@ class InputHandler(GameBackedManager):
         if target.length() > max_radius:
             target.scale_to_length(max_radius)
         return target
+    def clamp_build_target(self, world_pos):
+        target = pygame.Vector2(world_pos)
+        if target.length() > BUILD_MAX_RADIUS:
+            target.scale_to_length(BUILD_MAX_RADIUS)
+        return target
+    def handle_build_click(self, pos):
+        """Build button, open sheet, and placement clicks (Section 9.1)."""
+        if self.placing_building is not None:
+            self.note_manual_activity(stop_auto=False)
+            world_pos = self.camera.unproject(pos[0], pos[1])
+            self.set_placement_pos(self.clamp_build_target(world_pos))
+            if self.placement_valid:
+                self.confirm_placement()
+            return True
+        if self.build_menu_open:
+            if self.build_menu_close_rect.collidepoint(pos):
+                self.note_manual_activity(stop_auto=False)
+                self.close_build_menu()
+                return True
+            for building_id, rect in self.build_card_rects:
+                if rect.collidepoint(pos):
+                    self.note_manual_activity(stop_auto=False)
+                    self.select_build_card(building_id)
+                    return True
+            return True
+        if self.build_button_rect.collidepoint(pos):
+            self.note_manual_activity(stop_auto=False)
+            self.toggle_build_menu()
+            return True
+        return False
+    def handle_build_menu_key(self, key):
+        if key in (pygame.K_ESCAPE, pygame.K_b):
+            self.note_manual_activity(stop_auto=False)
+            self.close_build_menu()
+            return True
+        if key in (pygame.K_a, pygame.K_LEFT):
+            self.move_build_selection(-1)
+            return True
+        if key in (pygame.K_d, pygame.K_RIGHT):
+            self.move_build_selection(1)
+            return True
+        if key in (pygame.K_w, pygame.K_UP):
+            self.move_build_selection(-5)
+            return True
+        if key in (pygame.K_s, pygame.K_DOWN):
+            self.move_build_selection(5)
+            return True
+        if key in (pygame.K_RETURN, pygame.K_SPACE):
+            entries = self.build_card_entries()
+            if entries:
+                self.build_selected = max(0, min(len(entries) - 1, self.build_selected))
+                self.select_build_card(entries[self.build_selected]["id"])
+            return True
+        return True
+    def handle_build_placement_key(self, key):
+        if key == pygame.K_ESCAPE:
+            self.note_manual_activity(stop_auto=False)
+            self.cancel_placement()
+            return True
+        if key in (pygame.K_RETURN, pygame.K_SPACE):
+            self.note_manual_activity(stop_auto=False)
+            if self.placement_valid:
+                self.confirm_placement()
+            return True
+        step = BUILD_NUDGE_STEP
+        move = {
+            pygame.K_a: (-step, 0), pygame.K_LEFT: (-step, 0),
+            pygame.K_d: (step, 0), pygame.K_RIGHT: (step, 0),
+            pygame.K_w: (0, -step), pygame.K_UP: (0, -step),
+            pygame.K_s: (0, step), pygame.K_DOWN: (0, step),
+        }.get(key)
+        if move:
+            self.note_manual_activity(stop_auto=False)
+            self.set_placement_pos(self.clamp_build_target(self.placement_pos + pygame.Vector2(move)))
+        return True
     def clicked_world_target(self, screen_pos, world_pos, hit_radius=CLICK_ACTION_SCREEN_RADIUS):
         screen = self.camera.project(world_pos.x, world_pos.y)
         return screen.distance_to(screen_pos) <= hit_radius
@@ -241,6 +318,13 @@ class InputHandler(GameBackedManager):
                     pass
                 elif self.title_screen:
                     self.handle_title_key(event.key)
+                elif self.placing_building is not None:
+                    self.handle_build_placement_key(event.key)
+                elif self.build_menu_open:
+                    self.handle_build_menu_key(event.key)
+                elif event.key == pygame.K_b:
+                    self.note_manual_activity(stop_auto=False)
+                    self.toggle_build_menu()
                 elif event.key == pygame.K_RETURN:
                     self.note_manual_activity(stop_auto=False)
                     self.toggle_options()

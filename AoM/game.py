@@ -49,7 +49,23 @@ class Game:
         self.encounter_cooldown = 0.0
         self.last_encounter_result = None
         self.encounters_won = 0
+        self.lumens_collected = 0
         self.completed_encounters = set()
+        # Phase 2 (AOM-47): build menu / placement / encounter banner.
+        self.build_menu_open = False
+        self.build_menu_t = 0.0
+        self.build_selected = 0
+        self.build_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.build_card_rects = []
+        self.build_menu_close_rect = pygame.Rect(0, 0, 0, 0)
+        self.placing_building = None
+        self.placement_pos = pygame.Vector2(0, 0)
+        self.placement_valid = False
+        self.placed_buildings = []
+        self.auto_build_cooldown = 0.0
+        self.build_feedback_t = 0.0
+        self.build_feedback_text = ""
+        self.encounter_banner = None
         self.font_cache = {}
         self.title_texture_cache = {}
         self.assets = AssetManager(self)
@@ -449,6 +465,7 @@ class Game:
         if encounter is None:
             return None
         self.pending_encounter = encounter
+        self._set_encounter_banner("pending", encounter=encounter)
         if self.auto_win_enabled:
             self.resolve_pending_encounter(auto_win=True)
         else:
@@ -470,6 +487,7 @@ class Game:
         self.pending_encounter = None
         self.encounter_timer = 0.0
         self.last_encounter_result = result
+        self._set_encounter_banner("result", result=result, encounter=encounter)
         if result["win"]:
             self.completed_encounters.add(encounter.id)
             self.encounters_won += 1
@@ -492,6 +510,180 @@ class Game:
         index = TIME_SPEED_OPTIONS.index(self.time_scale)
         self.time_scale = TIME_SPEED_OPTIONS[(index + step) % len(TIME_SPEED_OPTIONS)]
         return self.time_scale
+
+    # --- Phase 2 (AOM-47): build menu, placement, encounter banner ---------
+    def building_display_name(self, building_id):
+        return building_id.replace("_", " ").title()
+
+    def building_status(self, building_id):
+        """``(unlocked, built, affordable)`` for a build-sheet card."""
+        civ = self.current_civ()
+        unlocked = building_unlocked(building_id, civ.level)
+        built = bool(civ.built.get(building_id))
+        affordable = self.resources.can_afford(BUILDING_COST.get(building_id, {}))
+        return unlocked, built, affordable
+
+    def build_card_entries(self):
+        entries = []
+        for building_id in BUILDINGS:
+            unlocked, built, affordable = self.building_status(building_id)
+            entries.append({
+                "id": building_id,
+                "name": self.building_display_name(building_id),
+                "unlocked": unlocked,
+                "built": built,
+                "affordable": affordable,
+                "unlock_level": BUILDING_UNLOCK_LEVEL.get(building_id, 999),
+                "cost": BUILDING_COST.get(building_id, {}),
+            })
+        return entries
+
+    def next_unlocked_building(self):
+        civ = self.current_civ()
+        for building_id in BUILDINGS:
+            if building_unlocked(building_id, civ.level) and not civ.built.get(building_id):
+                return building_id
+        return None
+
+    def build_button_state(self):
+        """One of ``available`` | ``all_built`` | ``locked`` (Section 9.1.1)."""
+        civ = self.current_civ()
+        unlocked = [b for b in BUILDINGS if building_unlocked(b, civ.level)]
+        if not unlocked:
+            return "locked"
+        if all(civ.built.get(b) for b in unlocked):
+            return "all_built"
+        return "available"
+
+    def next_unlock_info(self):
+        """Tooltip line ``Next: {Name} at L{n}`` (recognition over recall)."""
+        civ = self.current_civ()
+        best = None
+        for building_id in BUILDINGS:
+            level = BUILDING_UNLOCK_LEVEL.get(building_id, 999)
+            if level > civ.level and (best is None or level < best[1]):
+                best = (building_id, level)
+        if best is None:
+            return ""
+        return f"Next: {self.building_display_name(best[0])} at L{best[1]}"
+
+    @property
+    def build_menu_visible(self):
+        return self.build_menu_open or self.build_menu_t > 0.0
+
+    def open_build_menu(self):
+        if self.title_screen:
+            return False
+        self.build_menu_open = True
+        self.item_drawer_open = False
+        self.options_open = False
+        self.player.moving = False
+        self.player.clear_walk_target()
+        self.build_selected = max(0, min(len(BUILDINGS) - 1, self.build_selected))
+        return True
+
+    def close_build_menu(self):
+        if not self.build_menu_visible:
+            return False
+        self.build_menu_open = False
+        return True
+
+    def toggle_build_menu(self):
+        if self.build_menu_open:
+            return self.close_build_menu()
+        return self.open_build_menu()
+
+    def move_build_selection(self, direction):
+        if not BUILDINGS:
+            return
+        self.build_selected = (self.build_selected + direction) % len(BUILDINGS)
+
+    def select_build_card(self, building_id):
+        """Pick an affordable, unlocked, unbuilt card and start placement."""
+        if building_id not in BUILDINGS:
+            return False
+        unlocked, built, affordable = self.building_status(building_id)
+        if not unlocked or built or not affordable:
+            return False
+        self.placing_building = building_id
+        self.build_menu_open = False
+        self.placement_pos = self.auto_build_position(len(self.placed_buildings))
+        self.placement_valid = self.placement_is_valid(self.placement_pos)
+        self.player.moving = False
+        self.player.clear_walk_target()
+        return True
+
+    def cancel_placement(self):
+        if self.placing_building is None:
+            return False
+        self.placing_building = None
+        self.placement_valid = False
+        return True
+
+    def placement_is_valid(self, pos):
+        target = pygame.Vector2(pos)
+        if target.length() > BUILD_MAX_RADIUS:
+            return False
+        for placed in self.placed_buildings:
+            if target.distance_to(placed["pos"]) < BUILD_MIN_SPACING:
+                return False
+        return True
+
+    def set_placement_pos(self, pos):
+        self.placement_pos = pygame.Vector2(pos)
+        self.placement_valid = self.placement_is_valid(self.placement_pos)
+        return self.placement_valid
+
+    def confirm_placement(self):
+        """Open the build confirmation modal for the current valid ghost."""
+        if self.placing_building is None or not self.placement_valid:
+            return False
+        payload = {
+            "building_id": self.placing_building,
+            "pos": (self.placement_pos.x, self.placement_pos.y),
+            "cost": dict(BUILDING_COST.get(self.placing_building, {})),
+        }
+        self.request_confirmation("build", payload)
+        return True
+
+    def commit_build(self, building_id, pos=None):
+        """Spend cost, set ``civ.built``, and place a visible world decal."""
+        if not self.build(building_id):
+            return False
+        if pos is None:
+            pos = self.auto_build_position(len(self.placed_buildings))
+        self.placed_buildings.append({
+            "id": building_id,
+            "pos": pygame.Vector2(pos),
+            "age": 0.0,
+        })
+        self.placing_building = None
+        self.placement_valid = False
+        self.build_feedback_t = BUILD_PLACEMENT_FEEDBACK_SECONDS
+        self.build_feedback_text = f"+Built {self.building_display_name(building_id)}"
+        self.note_manual_activity(stop_auto=False)
+        return True
+
+    def auto_build_position(self, index):
+        radius = min(BUILD_MAX_RADIUS, AUTO_BUILD_START_RADIUS + AUTO_BUILD_SPACING * index)
+        angle = index * AUTO_BUILD_GOLDEN_ANGLE
+        return pygame.Vector2(math.cos(angle) * radius, math.sin(angle) * radius)
+
+    def _set_encounter_banner(self, kind, **fields):
+        banner = {"kind": kind, "age": 0.0}
+        banner.update(fields)
+        self.encounter_banner = banner
+        return banner
+
+    def update_encounter_banner(self, dt):
+        if self.encounter_banner is None:
+            return
+        self.encounter_banner["age"] += dt
+        if (
+            self.encounter_banner["kind"] == "result"
+            and self.encounter_banner["age"] >= ENCOUNTER_BANNER_SECONDS
+        ):
+            self.encounter_banner = None
 
 
 
@@ -525,7 +717,22 @@ class Game:
         self.encounter_cooldown = 0.0
         self.last_encounter_result = None
         self.encounters_won = 0
+        self.lumens_collected = 0
         self.completed_encounters = set()
+        self.build_menu_open = False
+        self.build_menu_t = 0.0
+        self.build_selected = 0
+        self.build_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.build_card_rects = []
+        self.build_menu_close_rect = pygame.Rect(0, 0, 0, 0)
+        self.placing_building = None
+        self.placement_pos = pygame.Vector2(0, 0)
+        self.placement_valid = False
+        self.placed_buildings = []
+        self.auto_build_cooldown = 0.0
+        self.build_feedback_t = 0.0
+        self.build_feedback_text = ""
+        self.encounter_banner = None
         self.mycelial_lumen_ready_time = 0.0
         self.growth_state = 0
         self.phase = "explore"
@@ -738,6 +945,7 @@ class Game:
 
     def update(self, dt):
         self.ui_time += dt
+        self.update_encounter_banner(dt)
         if self.inventory_page_anim_t > 0 and self.inventory_page != self.inventory_page_target:
             self.inventory_page_anim_t += dt / INVENTORY_PAGE_ANIM_SECONDS
             if self.inventory_page_anim_t >= 1.0:
@@ -802,10 +1010,30 @@ class Game:
             self.player.clear_walk_target()
             self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
             return
+        build_target = 1.0 if self.build_menu_open else 0.0
+        if self.build_menu_t < build_target:
+            self.build_menu_t = min(build_target, self.build_menu_t + drawer_step)
+        elif self.build_menu_t > build_target:
+            self.build_menu_t = max(build_target, self.build_menu_t - drawer_step)
+        if self.build_menu_visible:
+            self.concentrating = False
+            self.concentrate_mode = None
+            self.concentrate_rock.held = False
+            self.player.moving = False
+            self.player.clear_walk_target()
+            self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
+            return
         # Accelerated time testing affordance: only the simulation dt is scaled
         # (economy, encounter/beat timers, auto-guide, world motion). UI, menu,
         # fades, and input handling above/below stay on the real frame dt.
         sim_dt = dt * self.time_scale
+        if self.auto_build_cooldown > 0.0:
+            self.auto_build_cooldown = max(0.0, self.auto_build_cooldown - sim_dt)
+        if self.build_feedback_t > 0.0:
+            self.build_feedback_t = max(0.0, self.build_feedback_t - dt)
+        for placed in self.placed_buildings:
+            if placed["age"] < BUILD_GROW_SECONDS:
+                placed["age"] = min(BUILD_GROW_SECONDS, placed["age"] + dt)
         self.world_time += sim_dt
         self.update_economy(sim_dt)
         if self.guidance_active():
@@ -893,6 +1121,7 @@ class Game:
                 if not lumen.collected and lumen.distance_to(self.player.pos.x, self.player.pos.y) < 62:
                     lumen.collect()
                     self.lumen_count += 1
+                    self.lumens_collected += 1
                     self.player.trigger_pulse()
 
             self.growth_state = min(4, self.lumen_count // 3)

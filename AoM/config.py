@@ -382,3 +382,43 @@ BUILDING_UPKEEP_LUMEN = {"spore_hearth": 0.05, "decomposer_terrace": 0.05,
                          "hyphal_barracks": 0.10, "mycowatch_spire": 0.08}
 POP_ACORN_UPKEEP_PER_UNIT = 0.01   # acorn/s per living unit
 SPELL_LUMEN_COST = 2               # per elemental cast
+
+# ===== v0.2 PHASE 2 (AOM-47): build menu / auto-build / banner =====
+BUILD_MENU_HEIGHT = 300
+BUILD_GHOST_ALPHA = 140
+BUILD_MAX_RADIUS = CAVE_RADIUS - PLAYER_MARGIN - 120
+BUILD_MIN_SPACING = 120
+BUILD_NUDGE_STEP = 24
+BUILD_GROW_SECONDS = 0.45
+BUILD_PLACEMENT_FEEDBACK_SECONDS = 1.2
+
+# Deterministic Auto Play construction order (economy-rationale: fund the next
+# unlock first). See docs/v0.2-spec.md Section 9.2.
+AUTO_BUILD_ORDER = ("decomposer_terrace", "spore_hearth",
+                    "mycowatch_spire", "hyphal_barracks",
+                    "spore_library", "chitin_works",
+                    "wellspring_works", "spore_bazaar",
+                    "elemental_ley_ring", "symbiosis_bower")
+AUTO_BUILD_COOLDOWN = 1.5
+AUTO_BUILD_START_RADIUS = 150
+AUTO_BUILD_SPACING = 130
+AUTO_BUILD_GOLDEN_ANGLE = 2.399963229728653
+
+ENCOUNTER_BANNER_SECONDS = 4.0
+
+# Existing sprites only (Section 9.1.2). Paths are relative to ``AoM/assets/``.
+# ``spore_bazaar`` uses the HUD acorn icon because the proposed
+# ``commons_forest_props_v1/acorn`` decal does not exist in the runtime assets;
+# no new model/art is generated (board constraint).
+BUILDING_DECAL_ASSETS = {
+    "spore_hearth":       "sprites/polyhaven_pebbles_v1/pebble_00.png",
+    "decomposer_terrace": "sprites/commons_forest_props_v1/fern/fern_00.png",
+    "hyphal_barracks":    "sprites/polyhaven_pebbles_v1/pebble_01.png",
+    "mycowatch_spire":    "sprites/polyhaven_pebbles_v1/pebble_02.png",
+    "spore_library":      "sprites/commons_forest_props_v1/pinecone/pinecone_00.png",
+    "chitin_works":       "sprites/hud/glass_snail_shell.png",
+    "wellspring_works":   "sprites/polyhaven_pebbles_v1/pebble_03.png",
+    "spore_bazaar":       "sprites/hud/acorn.png",
+    "elemental_ley_ring": "sprites/hud/quartz_crystal.png",
+    "symbiosis_bower":    "sprites/commons_forest_props_v1/pine_needles/pine_needles_00.png",
+}

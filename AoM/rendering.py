@@ -65,6 +65,9 @@ class Renderer(GameBackedManager):
             for spell in self.elemental_spells:
                 if self.world_visible(spell.pos, 90):
                     drawables.append((spell.pos.y, lambda spell=spell: self.draw_elemental_spell(spell, time)))
+            for placed in self.placed_buildings:
+                if self.world_visible(placed["pos"], 140):
+                    drawables.append((placed["pos"].y, lambda placed=placed: self.draw_placed_building(placed)))
 
         self.debug_draw_count = len(drawables)
         for _, draw in sorted(drawables, key=lambda item: item[0]):
@@ -82,8 +85,11 @@ class Renderer(GameBackedManager):
         self.draw_transit_click_ui()
         self.draw_top_stone_bar()
         self.draw_top_hud_dock()
+        self.draw_encounter_banner()
         self.draw_item_drawer()
         self.draw_bottom_hud_dock()
+        self.draw_build_menu()
+        self.draw_build_placement()
         self.draw_guidance_word_overlay(time)
         self.draw_auto_guide_ui()
         self.draw_debug_overlay()
@@ -369,6 +375,18 @@ class Renderer(GameBackedManager):
             title = "RESTART REQUIRED"
             body = f"Changing framebuffer to {label} requires a restart. Current progress will be lost."
             confirm = "Continue"
+        elif action == "build":
+            payload = self.confirm_payload or {}
+            name = self.building_display_name(payload.get("building_id", "")) or "Building"
+            title = f"BUILD {name.upper()}"
+            cost = payload.get("cost") or {}
+            cost_text = ", ".join(
+                f"{amount} \u00d7 {RESOURCE_NAMES.get(key, key)}" for key, amount in cost.items()
+            )
+            body = f"Construct {name} here?"
+            if cost_text:
+                body += f" Cost: {cost_text}."
+            confirm = "Build"
         else:
             title = "EXIT GAME"
             body = "Return to the desktop/browser shell."
@@ -596,13 +614,256 @@ class Renderer(GameBackedManager):
         if section_rects:
             self.resource_icon_rects = {}
             self.inventory_pagination_rects = []
+            self.build_button_rect = pygame.Rect(0, 0, 0, 0)
             section = section_rects[0]
             grid_rect = pygame.Rect(section.left + INVENTORY_PAGINATION_WIDTH, section.top, INVENTORY_PAGE_GRID_WIDTH, section.height)
             self.draw_inventory_pagination(panel, section, rect.topleft)
             self.draw_lumen_resource_counter(panel, grid_rect, rect.topleft)
         if len(section_rects) > 1:
             self.draw_guidance_command(panel, section_rects[1])
+        if len(section_rects) > 2:
+            self.draw_build_button(panel, section_rects[2], rect.topleft)
         self.screen.blit(panel, rect)
+    def draw_build_button(self, panel, rect, screen_offset=(0, 0)):
+        """Rightmost dock section: the single build entry point (9.1.1)."""
+        rect = pygame.Rect(rect)
+        self.build_button_rect = pygame.Rect(0, 0, 0, 0)
+        if rect.width <= 0 or rect.height <= 0:
+            return
+        state = self.build_button_state()
+        label = {"available": "BUILD", "all_built": "BUILD \u2713", "locked": "BUILD \u2014"}.get(state, "BUILD")
+        pulse = 0.5 + 0.5 * math.sin(self.world_time * math.tau * 0.5)
+        if state == "available":
+            border = MYCELIUM
+            border_alpha = 120 + round(pulse * 60)
+            text_color = TEXT
+        else:
+            border = MYCELIUM_FAINT_DIM
+            border_alpha = 70
+            text_color = MYCELIUM_FAINT_DIM
+        plate = pygame.Surface(rect.size, pygame.SRCALPHA)
+        plate.fill((10, 16, 17, 200))
+        pygame.draw.rect(plate, (*border, border_alpha), plate.get_rect(), 2)
+        image = self.small_font.render(label, True, text_color)
+        plate.blit(image, image.get_rect(center=(rect.width // 2, rect.height // 2 - 8)))
+        hint = self.next_unlock_info()
+        if hint:
+            hint_image = self.small_font.render(hint, True, MYCELIUM_FAINT_DIM)
+            plate.blit(hint_image, hint_image.get_rect(center=(rect.width // 2, rect.height // 2 + 14)))
+        panel.blit(plate, rect)
+        self.build_button_rect = rect.move(screen_offset[0], screen_offset[1])
+    def draw_placed_building(self, placed):
+        decal = self.assets.load_building_decal(placed["id"])
+        if decal is None:
+            return
+        age = placed.get("age", BUILD_GROW_SECONDS)
+        grow = smoothstep(max(0.0, min(1.0, age / BUILD_GROW_SECONDS))) if BUILD_GROW_SECONDS > 0 else 1.0
+        scale = 0.6 + 0.4 * grow
+        self.draw_world_sprite_shadow(decal, placed["pos"], 60, scale=scale)
+        self.blit_world_image(decal, placed["pos"], scale=scale)
+    def draw_build_placement(self):
+        if self.placing_building is None or self.title_screen:
+            return
+        decal = self.assets.load_building_decal(self.placing_building)
+        pos = self.placement_pos
+        color = MYCELIUM if self.placement_valid else (214, 96, 72)
+        if decal is not None:
+            self.draw_world_sprite_shadow(decal, pos, 54)
+            ghost = decal.copy()
+            ghost.set_alpha(BUILD_GHOST_ALPHA)
+            self.blit_world_image(ghost, pos, cache=False)
+        screen = self.camera.project(pos.x, pos.y)
+        ring = make_elliptical_ring(
+            max(1, round(130 * self.camera.zoom)),
+            max(1, round(130 * DEPTH_SCALE * self.camera.zoom)),
+            max(2, round(4 * self.camera.zoom)),
+            color,
+            200,
+        )
+        self.screen.blit(ring, ring.get_rect(center=(round(screen.x), round(screen.y))))
+        name = self.building_display_name(self.placing_building)
+        tag = self.small_font.render(name, True, color)
+        tag_rect = tag.get_rect(center=(round(screen.x), round(screen.y - 66 * self.camera.zoom)))
+        bg = tag_rect.inflate(14, 8)
+        pygame.draw.rect(self.screen, (6, 10, 12, 214), bg)
+        pygame.draw.rect(self.screen, color, bg, 1)
+        self.screen.blit(tag, tag_rect)
+    def resource_icon(self, key):
+        return {
+            "lumen": self.lumen_icon, "root": self.root_icon, "shell": self.shell_icon,
+            "crystal": self.crystal_icon, "acorn": self.acorn_icon, "amber": self.amber_icon,
+        }.get(key)
+    def draw_build_cost_row(self, panel, rect, entry):
+        cost = entry.get("cost") or {}
+        if not cost:
+            return
+        x = rect.left + 8
+        y = rect.bottom - 20
+        for key, amount in cost.items():
+            have = self.resources.get(key)
+            ok = have >= amount
+            icon = self.resource_icon(key)
+            if icon is not None:
+                img = icon.copy()
+                img.set_alpha(232 if ok else 110)
+                icon_rect = img.get_rect(midleft=(x, y + 8))
+                panel.blit(img, icon_rect)
+                x = icon_rect.right + 3
+            label = str(amount)
+            color = TEXT if ok else (214, 96, 72)
+            if not ok:
+                label = "\u2212" + label
+            text = self.small_font.render(label, True, color)
+            panel.blit(text, text.get_rect(midleft=(x, y + 8)))
+            x += text.get_width() + 10
+    def draw_build_card(self, panel, rect, entry, selected):
+        rect = pygame.Rect(rect)
+        if entry["built"]:
+            fill = (10, 24, 18, 210)
+            border = MYCELIUM_FAINT_DIM
+        elif not entry["unlocked"]:
+            fill = (12, 14, 15, 200)
+            border = (70, 72, 70)
+        elif entry["affordable"]:
+            fill = (9, 30, 38, 224) if selected else (10, 18, 20, 210)
+            border = MYCELIUM if selected else MYCELIUM_FAINT
+        else:
+            fill = (30, 16, 14, 210)
+            border = (150, 84, 68)
+        pygame.draw.rect(panel, fill, rect)
+        pygame.draw.rect(panel, border, rect, 2 if selected else 1)
+        decal = self.assets.load_building_decal(entry["id"])
+        thumb_rect = pygame.Rect(rect.left + 6, rect.top + 6, rect.width - 12, max(0, rect.height - 40))
+        if decal is not None and thumb_rect.height > 4 and thumb_rect.width > 4:
+            scale = min(thumb_rect.width / decal.get_width(), thumb_rect.height / decal.get_height())
+            size = (max(1, round(decal.get_width() * scale)), max(1, round(decal.get_height() * scale)))
+            scaler = pygame.transform.scale if WEB_BUILD else pygame.transform.smoothscale
+            img = scaler(decal, size)
+            if not entry["unlocked"]:
+                img = img.copy()
+                img.fill((70, 70, 70, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            panel.blit(img, img.get_rect(center=thumb_rect.center))
+        name_color = TEXT if selected else (218, 194, 137)
+        name_img = self.small_font.render(entry["name"], True, name_color)
+        panel.blit(name_img, name_img.get_rect(midtop=(rect.centerx, thumb_rect.bottom + 1)))
+        if entry["built"]:
+            status = self.small_font.render("\u2713 Built", True, QUEST)
+            panel.blit(status, status.get_rect(midtop=(rect.centerx, rect.bottom - 22)))
+        elif not entry["unlocked"]:
+            status = self.small_font.render(f"Unlocks at L{entry['unlock_level']}", True, MYCELIUM_FAINT_DIM)
+            panel.blit(status, status.get_rect(midtop=(rect.centerx, rect.bottom - 22)))
+        else:
+            self.draw_build_cost_row(panel, rect, entry)
+    def draw_build_menu(self):
+        self.build_card_rects = []
+        self.build_menu_close_rect = pygame.Rect(0, 0, 0, 0)
+        if not self.build_menu_visible or self.title_screen:
+            return
+        progress = smoothstep(max(0.0, min(1.0, self.build_menu_t)))
+        dock_height = 100
+        height = min(BUILD_MENU_HEIGHT, SCREEN_HEIGHT - dock_height - 40)
+        width = min(760, SCREEN_WIDTH - 24)
+        x = (SCREEN_WIDTH - width) // 2
+        y = round(SCREEN_HEIGHT - dock_height - height * progress)
+        rect = pygame.Rect(x, y, width, height)
+        panel, _ = self.build_stone_dock(rect, sections=1, border=7, divider_width=0, darken=112)
+        if panel is None:
+            return
+        self.draw_branded_menu_title(panel, "BUILD", width // 2, 30)
+        pygame.draw.line(panel, (92, 70, 38), (24, 52), (width - 24, 52), 1)
+        close_size = 28
+        close_rect = pygame.Rect(width - close_size - 14, 12, close_size, close_size)
+        pygame.draw.rect(panel, (10, 12, 12, 218), close_rect)
+        pygame.draw.rect(panel, (216, 210, 184, 132), close_rect, 1)
+        close_text = self.small_font.render("X", True, (246, 248, 246))
+        panel.blit(close_text, close_text.get_rect(center=close_rect.center))
+        self.build_menu_close_rect = close_rect.move(rect.topleft)
+
+        entries = self.build_card_entries()
+        cols, rows = 5, 2
+        grid = pygame.Rect(18, 60, width - 36, height - 72)
+        cell_w = grid.width // cols
+        cell_h = grid.height // rows
+        for index, entry in enumerate(entries[: cols * rows]):
+            col = index % cols
+            row = index // cols
+            card = pygame.Rect(
+                grid.left + col * cell_w + 4,
+                grid.top + row * cell_h + 4,
+                cell_w - 8,
+                cell_h - 8,
+            )
+            self.draw_build_card(panel, card, entry, index == self.build_selected)
+            self.build_card_rects.append((entry["id"], card.move(rect.topleft)))
+        self.screen.blit(panel, rect)
+    def encounter_composition_lines(self, encounter):
+        names = CIV_CLASS_NAMES.get(self.current_civ().civ_id, {})
+        parts = []
+        for stack in encounter.enemy.stacks:
+            role = names.get(stack.role, stack.role.title())
+            parts.append(f"{stack.count} \u00d7 {role}")
+        line = " \u00b7 ".join(parts)
+        tags = []
+        if getattr(encounter, "boss", False):
+            tags.append("Boss")
+        if getattr(encounter, "capstone", False):
+            tags.append("Capstone")
+        if tags:
+            line += "  [" + " ".join(tags) + "]"
+        return [line]
+    def draw_encounter_panel(self, title, lines, color, progress):
+        width = min(560, SCREEN_WIDTH - 48)
+        line_h = self.small_font.get_height() + 6
+        height = 56 + line_h * len(lines) + 14
+        rect = pygame.Rect((SCREEN_WIDTH - width) // 2, 52, width, height)
+        panel = pygame.Surface((width, height), pygame.SRCALPHA)
+        panel.fill((6, 10, 12, 236))
+        pygame.draw.rect(panel, (92, 70, 38), panel.get_rect(), 1)
+        pygame.draw.rect(panel, (*color, 90), panel.get_rect().inflate(-6, -6), 1)
+        title_img = self.title_small_font.render(title, True, color)
+        panel.blit(title_img, title_img.get_rect(center=(width // 2, 28)))
+        y = 54
+        for line in lines:
+            img = self.small_font.render(line, True, TEXT)
+            panel.blit(img, img.get_rect(center=(width // 2, y)))
+            y += line_h
+        bar_width = max(0, round((width - 20) * max(0.0, min(1.0, progress))))
+        pygame.draw.rect(panel, color, pygame.Rect(10, height - 6, bar_width, 3))
+        self.screen.blit(panel, rect)
+    def draw_encounter_banner(self):
+        banner = self.encounter_banner
+        if banner is None or self.title_screen:
+            return
+        age = banner["age"]
+        if banner["kind"] == "pending":
+            encounter = banner.get("encounter")
+            if encounter is None:
+                return
+            title = f"ENCOUNTER \u00b7 {encounter.terrain.title()}"
+            progress = 0.0
+            if ENCOUNTER_AUTO_RESOLVE_SECONDS > 0:
+                progress = max(0.0, min(1.0, 1.0 - self.encounter_timer / ENCOUNTER_AUTO_RESOLVE_SECONDS))
+            self.draw_encounter_panel(title, self.encounter_composition_lines(encounter), QUEST, progress)
+            return
+        result = banner.get("result") or {}
+        win = bool(result.get("win"))
+        color = QUEST if win else (214, 96, 72)
+        glyph = "\u25b2" if win else "\u2715"
+        title = f"{glyph} {'VICTORY' if win else 'DEFEAT'}"
+        lines = [
+            f"Power  {result.get('player_power', 0):.0f}  vs  {result.get('enemy_power', 0):.0f}",
+            f"Losses  {round(result.get('player_loss_frac', 0.0) * 100)}% of your force",
+        ]
+        reward = result.get("reward") or {}
+        if win and reward:
+            parts = ", ".join(f"{amount} \u00d7 {RESOURCE_NAMES.get(key, key)}" for key, amount in reward.items())
+            lines.append(f"Reward  {parts}")
+        elif not win:
+            lines.append("No spoils")
+        if result.get("auto_win"):
+            lines.append("AUTO WIN")
+        remaining = max(0.0, 1.0 - age / ENCOUNTER_BANNER_SECONDS) if ENCOUNTER_BANNER_SECONDS > 0 else 0.0
+        self.draw_encounter_panel(title, lines, color, remaining)
     def draw_stone_dock(self, rect, sections=1, border=7, divider_width=6, label=None, darken=82, section_widths=None):
         panel, _ = self.build_stone_dock(rect, sections, border, divider_width, label, darken, section_widths)
         if panel is not None:

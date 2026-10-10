@@ -4,6 +4,7 @@ import random
 import pygame
 
 from config import *
+from economy import BUILDING_COST, building_unlocked
 from entities import *
 from game_backed import GameBackedManager
 from utils import *
@@ -494,6 +495,13 @@ class AutoGuide(GameBackedManager):
             return
         if self.player.walk_target is not None:
             return
+        # Opportunistic construction in the idle window between beats/rests
+        # (Section 9.2). The guide is resting here (no walk target), so a build
+        # never interrupts an active move; the cooldown inside paces it. The
+        # spec's "end of auto_guide_choose_action" hook is kept too, but the beat
+        # branches return an action on essentially every call, so the rest
+        # window is the only reliable idle window in a full run.
+        self.auto_guide_try_build()
         if self.auto_guide_last_target is not None and self.player.pos.distance_to(self.auto_guide_last_target) < 74:
             self.auto_guide_last_target = None
             self.set_auto_guide_rest(self.auto_guide_last_rest_kind)
@@ -573,6 +581,58 @@ class AutoGuide(GameBackedManager):
                 if waypoint is None:
                     return False
                 return self.auto_guide_move_to(self.auto_guide_standoff_target(waypoint.pos, 72), "charge")
+        self.auto_guide_try_build()
+        return False
+    def auto_guide_try_build(self):
+        """Construct the next affordable building in ``AUTO_BUILD_ORDER`` (9.2).
+
+        Runs opportunistically in idle windows so a run visibly builds the civ.
+        Drives the real player path (open sheet -> select -> place -> confirm)
+        so Auto Play exercises the UI rather than a back door. Construction is a
+        visible side-effect, never a capstone gate, so a stuck build can never
+        block the beat loop.
+        """
+        if not self.intro_complete or not self.controls_enabled:
+            return False
+        if self.story_beat_locked or self.options_open:
+            return False
+        if self.pending_encounter is not None or self.encounter_banner is not None:
+            return False
+        if self.confirm_action is not None or self.placing_building is not None:
+            return False
+        if self.build_menu_open:
+            return False
+        if self.auto_build_cooldown > 0.0:
+            return False
+        # Never jeopardize the active level's capstone reserve. The Level-1
+        # capstone is "collect REQUIRED_LUMEN"; building at L1 spends/drains
+        # Lumen (upkeep) and can strand progression. Levels 2-5 capstones are
+        # not resource-based, so defer Auto Play construction until L1 clears.
+        if self.current_level() <= 1 and not self.completed_level_capstone():
+            return False
+        civ = self.current_civ()
+        level = self.current_level()
+        for next_id in AUTO_BUILD_ORDER:
+            if not building_unlocked(next_id, level):
+                continue
+            if civ.built.get(next_id):
+                continue
+            if not self.resources.can_afford(BUILDING_COST.get(next_id, {})):
+                continue
+            pos = self.auto_build_position(len(self.placed_buildings))
+            if not self.open_build_menu():
+                return False
+            if not self.select_build_card(next_id):
+                return False
+            self.set_placement_pos(pos)
+            if not self.placement_valid:
+                self.cancel_placement()
+                return False
+            if not self.confirm_placement():
+                return False
+            self.confirm_current_action()
+            self.auto_build_cooldown = AUTO_BUILD_COOLDOWN
+            return True
         return False
     def auto_guide_concentrate_nearest_pebble(self, group):
         pebble, waypoint = self.reserve_auto_guide_pebble_task(group)
