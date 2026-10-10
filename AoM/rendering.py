@@ -9,8 +9,12 @@ from utils import *
 
 
 def format_resource_amount(count):
-    """Format an inventory count for HUD display, rounded to one decimal place."""
-    return f"{float(count):.1f}"
+    """Format an inventory count for HUD display as a whole number.
+
+    An item is only granted once a full unit accrues, so the HUD floors the
+    float accumulator and shows no decimals.
+    """
+    return str(math.floor(float(count)))
 
 
 def lumen_rotated_surface(src, time, phase_offset=0):
