@@ -172,6 +172,8 @@ class UIManager(GameBackedManager):
             self.auto_win_enabled = not self.auto_win_enabled
             if self.auto_win_enabled:
                 self.force_win_current_encounter()
+        elif label == "Time Speed":
+            self.cycle_time_scale(direction)
         elif label == "End Game":
             self.request_confirmation("end_game")
         elif label == "Close":
@@ -205,6 +207,8 @@ class UIManager(GameBackedManager):
             return "On" if self.debug_overlay else "Off"
         if label == "Auto Win":
             return "On" if self.auto_win_enabled else "Off"
+        if label == "Time Speed":
+            return f"{self.time_scale}x"
         return ""
     def option_display_value(self, label):
         value = self.option_value(label)
@@ -217,6 +221,7 @@ class UIManager(GameBackedManager):
             "Auto Play": "Choose automation speed for helpful player tasks.",
             "Debug Overlay": "Show frame timing and render diagnostics.",
             "Auto Win": "Force every encounter to resolve as a win (testing affordance).",
+            "Time Speed": "Advance simulation time faster for testing (1x/2x/4x/8x; F9 cycles).",
             "Sprite Style": "Choose a mushroom species or visual style for sprites.",
             "Darkness Overlay": "Toggle the cave darkness lighting layer.",
             "Smooth Scaling": "Use smoother scaling for browser and framebuffer output.",

@@ -43,6 +43,7 @@ class Game:
         self.resources = ResourceState()
         self.progress = GameProgress()
         self.auto_win_enabled = AUTO_WIN_DEFAULT
+        self.time_scale = TIME_SPEED_DEFAULT
         self.pending_encounter = None
         self.encounter_timer = 0.0
         self.encounter_cooldown = 0.0
@@ -483,6 +484,15 @@ class Game:
             self.maybe_start_level_encounter()
         return self.resolve_pending_encounter(auto_win=True)
 
+    def cycle_time_scale(self, direction=1):
+        """Cycle the accelerated-time testing affordance (1x/2x/4x/8x)."""
+        if self.time_scale not in TIME_SPEED_OPTIONS:
+            self.time_scale = TIME_SPEED_DEFAULT
+        step = 1 if direction >= 0 else -1
+        index = TIME_SPEED_OPTIONS.index(self.time_scale)
+        self.time_scale = TIME_SPEED_OPTIONS[(index + step) % len(TIME_SPEED_OPTIONS)]
+        return self.time_scale
+
 
 
 
@@ -791,8 +801,12 @@ class Game:
             self.player.clear_walk_target()
             self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
             return
-        self.world_time += dt
-        self.update_economy(dt)
+        # Accelerated time testing affordance: only the simulation dt is scaled
+        # (economy, encounter/beat timers, auto-guide, world motion). UI, menu,
+        # fades, and input handling above/below stay on the real frame dt.
+        sim_dt = dt * self.time_scale
+        self.world_time += sim_dt
+        self.update_economy(sim_dt)
         if self.guidance_active():
             self.update_guidance_word(dt)
             self.concentrating = False
@@ -807,7 +821,7 @@ class Game:
             self.player.moving = False
             self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
             return
-        self.intro_time += dt
+        self.intro_time += sim_dt
         self.player.begin_frame()
         try:
             keys = pygame.key.get_pressed()
@@ -819,16 +833,16 @@ class Game:
                         auto_walk_speed_scale = AUTO_GUIDE_SLOW_SPEED_SCALE
                     elif self.auto_guide_enabled and self.auto_guide_speed_mode == "Fast":
                         auto_walk_speed_scale = AUTO_GUIDE_FAST_SPEED_SCALE
-                    self.player.update(keys, dt, speed_scale, auto_walk_speed_scale)
-                self.update_auto_guide(dt, keys)
+                    self.player.update(keys, sim_dt, speed_scale, auto_walk_speed_scale)
+                self.update_auto_guide(sim_dt, keys)
                 if self.concentrating and not self.options_open:
-                    self.update_concentrate_action(dt)
+                    self.update_concentrate_action(sim_dt)
             else:
                 self.concentrating = False
                 self.concentrate_rock.held = False
                 self.player.pulse_timer = 0
                 if not self.story_beat_locked:
-                    self.update_auto_guide(dt, keys)
+                    self.update_auto_guide(sim_dt, keys)
             if self.story_beat_locked:
                 self.concentrating = False
                 self.concentrate_mode = None
@@ -836,42 +850,42 @@ class Game:
                 self.player.moving = False
                 self.player.clear_walk_target()
                 camera_target, camera_zoom, camera_speed = self.camera_target()
-                self.camera.update(camera_target, camera_zoom, camera_speed, dt)
+                self.camera.update(camera_target, camera_zoom, camera_speed, sim_dt)
                 self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
                 if self.phase in TRANSIT_UNLOCK_PHASES:
-                    self.update_transit(dt)
+                    self.update_transit(sim_dt)
                 else:
-                    self.update_feed_cinematic(dt)
+                    self.update_feed_cinematic(sim_dt)
                 return
-            self.concentrate_rock.sway_phase += dt * 2.6
+            self.concentrate_rock.sway_phase += sim_dt * 2.6
             if self.right_channel_active:
-                self.right_channel_reveal = min(1.0, self.right_channel_reveal + dt / RIGHT_CHANNEL_REVEAL_SECONDS)
+                self.right_channel_reveal = min(1.0, self.right_channel_reveal + sim_dt / RIGHT_CHANNEL_REVEAL_SECONDS)
             for pebble in self.concentrate_pebbles:
-                pebble.sway_phase += dt * 2.8
-            self.update_npc_mushrooms(dt)
-            self.update_npc_channel_states(dt)
-            self.update_moving_pebbles(dt)
-            self.update_mushroom_terrain_lifts(dt)
-            self.update_channel_cover_leaves(dt)
-            self.update_moving_ferns(dt)
-            self.update_water_beat(dt)
-            self.update_elemental_spells(dt)
-            self.update_regen_mushrooms(dt)
-            self.update_waypoint_visual_charges(dt)
-            self.update_leaf_quest_lumens(dt)
+                pebble.sway_phase += sim_dt * 2.8
+            self.update_npc_mushrooms(sim_dt)
+            self.update_npc_channel_states(sim_dt)
+            self.update_moving_pebbles(sim_dt)
+            self.update_mushroom_terrain_lifts(sim_dt)
+            self.update_channel_cover_leaves(sim_dt)
+            self.update_moving_ferns(sim_dt)
+            self.update_water_beat(sim_dt)
+            self.update_elemental_spells(sim_dt)
+            self.update_regen_mushrooms(sim_dt)
+            self.update_waypoint_visual_charges(sim_dt)
+            self.update_leaf_quest_lumens(sim_dt)
             self.last_mouse_debug_time = max(0.0, self.last_mouse_debug_time - dt)
             camera_target, camera_zoom, camera_speed = self.camera_target()
-            self.camera.update(camera_target, camera_zoom, camera_speed, dt)
+            self.camera.update(camera_target, camera_zoom, camera_speed, sim_dt)
             for lumen in self.lumens:
-                lumen.update(dt, self.post_intro_reveal > 0.25 and self.lumen_is_on_screen(lumen))
+                lumen.update(sim_dt, self.post_intro_reveal > 0.25 and self.lumen_is_on_screen(lumen))
 
             if not self.intro_complete:
                 return
             if self.phase in (*TRANSIT_UNLOCK_PHASES, "transit_disappear", "transit_pan", "transit_appear"):
-                self.update_transit(dt)
+                self.update_transit(sim_dt)
                 return
             if self.phase in ("feed_complete_focus", "feed_complete_return", "concentrate_unlock"):
-                self.update_feed_cinematic(dt)
+                self.update_feed_cinematic(sim_dt)
                 return
 
             for lumen in self.lumens:
@@ -883,12 +897,12 @@ class Game:
             self.growth_state = min(4, self.lumen_count // 3)
             all_lumen_collected = self.lumen_count >= REQUIRED_LUMEN
             if all_lumen_collected:
-                self.mycelial_lumen_ready_time = min(MYCELIAL_LUMEN_READY_FADE_SECONDS, self.mycelial_lumen_ready_time + dt)
+                self.mycelial_lumen_ready_time = min(MYCELIAL_LUMEN_READY_FADE_SECONDS, self.mycelial_lumen_ready_time + sim_dt)
             else:
                 self.mycelial_lumen_ready_time = 0.0
             at_mycelial = self.player.pos.distance_to(self.spawn) < MYCELIAL_ACTIVATION_RADIUS
             if self.phase == "explore" and all_lumen_collected and at_mycelial:
-                self.charge_progress = min(1, self.charge_progress + dt / CHARGE_SECONDS)
+                self.charge_progress = min(1, self.charge_progress + sim_dt / CHARGE_SECONDS)
                 self.player.request_channel()
                 self.player.moving = False
                 if self.charge_progress >= 1:
@@ -898,13 +912,13 @@ class Game:
                     if self.auto_guide_enabled:
                         self.auto_guide_rest_timer = 1.0
             elif self.phase == "explore" and not at_mycelial:
-                self.charge_progress = max(0, self.charge_progress - dt * 0.35)
+                self.charge_progress = max(0, self.charge_progress - sim_dt * 0.35)
             elif self.phase == "feed":
-                self.update_leaf_feeding(dt)
+                self.update_leaf_feeding(sim_dt)
             if self.phase == "transit" and self.collect_ferns_03_complete and not self.charge_stones_04_complete:
-                self.update_player_stone_charging(dt)
+                self.update_player_stone_charging(sim_dt)
         finally:
-            self.player.update_channel_state(dt)
+            self.player.update_channel_state(sim_dt)
 
 
 

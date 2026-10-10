@@ -116,6 +116,7 @@ GAME_OPTIONS_ROWS = (
     "Debug Overlay",
     "About",
     "Auto Win",
+    "Time Speed",
     "SYSTEM",
     "End Game",
     *BACK_OPTIONS_ROWS,
@@ -326,6 +327,10 @@ TERRAIN_MULT = {"open": 1.10, "farmland": 1.10, "ley": 1.10}   # applies to matc
 TERRAIN_ROLE = {"open": "vanguard", "farmland": "forager", "ley": "chanter"}
 ENCOUNTER_AUTO_RESOLVE_SECONDS = 3.0   # delay before a pending encounter self-resolves
 AUTO_WIN_DEFAULT = False       # testing affordance, TOOLS/Options + F10
+# Accelerated time mode: a testing affordance that scales *simulation* dt only
+# (economy, encounter/beat timers, auto-guide). Render/UI/menu stay real-time.
+TIME_SPEED_OPTIONS = (1, 2, 4, 8)
+TIME_SPEED_DEFAULT = 1
 
 # ===== v0.2 ELEMENTS (see Section 6) =====
 ELEMENT_MECHANICS = {
