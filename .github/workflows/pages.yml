@@ -43,6 +43,17 @@ jobs:
           } > AoM/build_info.py
           cat AoM/build_info.py
 
+      # Apply the locked `web-10fps` asset profile before the bundle is built.
+      # tools/pack_web_atlas.py is a byte-for-byte mirror of the canonical packer
+      # in the private aom-internal repo (tools/pack_web_atlas.py, AOM-33). It
+      # repacks the animation frame dirs into lossless grid atlases and removes
+      # the now-redundant per-frame PNGs, so the loader (AOM-34) reads
+      # AoM/assets/atlas/manifest.json and aom.tar.gz drops from ~143 MB to ~63 MB.
+      - name: Apply the web-10fps atlas profile (lossless sprite atlas)
+        run: |
+          python -m pip install --disable-pip-version-check "Pillow==12.3.0"
+          python tools/pack_web_atlas.py --profile web-10fps --apply --report --aom-dir AoM
+
       - name: Build pygbag web bundle
         working-directory: AoM
         run: |
@@ -68,7 +79,29 @@ jobs:
         run: |
           test -f AoM/build/web/index.html
           test -f AoM/build/web/aom.tar.gz
+          test -f AoM/assets/atlas/manifest.json
           ls -la AoM/build/web
+
+      # Fail the deploy if the atlas profile was not actually applied (e.g. the
+      # packer silently no-oped and the full per-frame frames shipped again).
+      # Ceiling mirrors aom-internal/scripts/build-web-atlas-bundle.sh (75 MB;
+      # measured ~63 MB atlased vs ~143 MB unfolded).
+      - name: Web bundle size gate (atlas applied)
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          archive = Path("AoM/build/web/aom.tar.gz")
+          size = archive.stat().st_size
+          limit = 75_000_000
+          print(f"aom.tar.gz: {size} bytes ({size/1e6:.2f} MB)")
+          print(f"ceiling   : {limit} bytes ({limit/1e6:.2f} MB)")
+          if size > limit:
+              raise SystemExit(
+                  f"FAIL: aom.tar.gz is {size/1e6:.2f} MB > {limit/1e6:.0f} MB ceiling; "
+                  "the web-10fps atlas profile was not applied."
+              )
+          print(f"OK: atlased bundle ({limit/size:.2f}x under the ceiling).")
+          PY
 
       # Release gate: load the exact built bundle in headless Chromium and fail
       # the whole workflow (so nothing deploys) if it does not boot cleanly.
