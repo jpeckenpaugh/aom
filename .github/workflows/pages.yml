@@ -44,6 +44,89 @@ jobs:
           test -f AoM/build/web/aom.tar.gz
           ls -la AoM/build/web
 
+      # Release gate: load the exact built bundle in headless Chromium and fail
+      # the whole workflow (so nothing deploys) if it does not boot cleanly.
+      # Self-contained on purpose: the public `aom` repo stays free of test files.
+      - name: Browser smoke gate (headless Chromium)
+        env:
+          AOM_WEB_DIR: AoM/build/web
+        run: |
+          python -m pip install playwright==1.63.0
+          python -m playwright install --with-deps chromium
+          python - <<'PY'
+          import functools
+          import http.server
+          import os
+          import socketserver
+          import threading
+          import time
+          from pathlib import Path
+
+          from playwright.sync_api import sync_playwright
+
+          web = Path(os.environ["AOM_WEB_DIR"]).resolve()
+          assert (web / "index.html").is_file(), f"missing index.html in {web}"
+
+          # Console noise that is not an application failure.
+          benign = ("favicon.ico",)
+
+          class Quiet(http.server.SimpleHTTPRequestHandler):
+              def log_message(self, *args):
+                  pass
+
+          handler = functools.partial(Quiet, directory=str(web))
+          httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
+          httpd.daemon_threads = True
+          threading.Thread(target=httpd.serve_forever, daemon=True).start()
+          port = httpd.server_address[1]
+
+          console_errors = []
+          page_errors = []
+          shot = Path("browser-smoke.png")
+
+          def on_console(message):
+              if message.type == "error" and not any(s in message.text for s in benign):
+                  console_errors.append(message.text)
+
+          try:
+              with sync_playwright() as playwright:
+                  browser = playwright.chromium.launch(headless=True)
+                  page = browser.new_page(viewport={"width": 1280, "height": 720})
+                  page.on("console", on_console)
+                  page.on("pageerror", lambda exc: page_errors.append(str(exc)))
+
+                  # Pygbag 0.9.3 emits runtime URLs rooted at `localhost`.
+                  page.goto(f"http://localhost:{port}/", wait_until="domcontentloaded", timeout=60000)
+                  canvases = page.locator("canvas")
+                  canvases.first.wait_for(state="attached", timeout=60000)
+
+                  # Let the runtime boot past the loader before screenshotting.
+                  time.sleep(8)
+
+                  page.screenshot(path=str(shot), full_page=False)
+                  count = canvases.count()
+                  box = canvases.first.bounding_box()
+                  browser.close()
+          finally:
+              httpd.shutdown()
+              httpd.server_close()
+
+          assert count > 0, "pygbag runtime did not insert a canvas"
+          assert box is not None and box["width"] > 0 and box["height"] > 0, f"canvas has no size: {box}"
+          assert shot.is_file() and shot.stat().st_size > 0, "screenshot was not written"
+          assert not page_errors, f"uncaught page errors: {page_errors}"
+          assert not console_errors, f"console errors: {console_errors}"
+          print("browser smoke passed:", shot)
+          PY
+
+      - name: Upload browser smoke screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke
+          path: browser-smoke.png
+          if-no-files-found: warn
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
