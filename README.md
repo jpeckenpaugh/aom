@@ -27,6 +27,15 @@ it is **never committed to git**. See ADR-002 for the decision record.
 Contributions land directly on `main` (auto-deploys to Pages): push changes straight to
 `origin main` — there is no review/PR gate, and a change is not done until the deploy is live.
 
+## Testing
+
+This repo carries no test tooling and no manual test workflow. The automated
+release gate runs in the private `aom-internal` CI, and
+[`pages.yml`](.github/workflows/pages.yml) runs a headless browser smoke against the
+built bundle before deploying. Do not run the game or manual QA locally: push to
+`origin main` and confirm the gate/deploy is green. Manual/live testing is the
+board's job.
+
 ## Local build
 
 ```bash
