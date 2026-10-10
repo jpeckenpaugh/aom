@@ -39,6 +39,7 @@ class Renderer(GameBackedManager):
             self.draw_title_screen(time)
             self.draw_options_ui()
             self.draw_confirmation_ui()
+            self.draw_about_ui()
             pygame.display.flip()
             return
 
@@ -88,6 +89,7 @@ class Renderer(GameBackedManager):
         self.draw_debug_overlay()
         self.draw_options_ui()
         self.draw_confirmation_ui()
+        self.draw_about_ui()
         self.draw_gameplay_fade()
         self.draw_end_game_fade()
         pygame.display.flip()
@@ -401,6 +403,61 @@ class Renderer(GameBackedManager):
         self.screen.blit(panel, rect)
         self.confirm_yes_rect = yes_rect.move(rect.topleft)
         self.confirm_no_rect = no_rect.move(rect.topleft)
+    def draw_about_ui(self):
+        fade = max(0.0, min(1.0, self.about_fade))
+        if not self.about_open and fade <= 0:
+            self.about_rect = pygame.Rect(0, 0, 0, 0)
+            return
+        fade = fade * fade * (3 - 2 * fade)
+
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, round(140 * fade)))
+        self.screen.blit(overlay, (0, 0))
+
+        rows = self.about_lines or [("Build", "unknown"), ("Python", "-")]
+        width = min(620, SCREEN_WIDTH - 56)
+        line_height = self.small_font.get_height() + 8
+        header_height = 74
+        footer_height = 46
+        height = min(
+            SCREEN_HEIGHT - 48,
+            header_height + line_height * len(rows) + footer_height,
+        )
+        rect = pygame.Rect(
+            (SCREEN_WIDTH - width) // 2, (SCREEN_HEIGHT - height) // 2, width, height
+        )
+        self.about_rect = rect
+
+        panel = pygame.Surface((width, height), pygame.SRCALPHA)
+        panel.fill((6, 10, 12, 246))
+        pygame.draw.rect(panel, (92, 70, 38), panel.get_rect(), 1)
+        pygame.draw.rect(panel, (*MYCELIUM, 80), panel.get_rect().inflate(-6, -6), 1)
+
+        self.draw_branded_menu_title(panel, "ABOUT", width // 2, 34)
+        pygame.draw.line(panel, (92, 70, 38), (28, 60), (width - 28, 60), 1)
+
+        label_x = 36
+        value_right = width - 36
+        value_space = value_right - label_x - 150
+        y = 76
+        for label, value in rows:
+            label_image = self.small_font.render(str(label), True, (218, 194, 137))
+            panel.blit(label_image, (label_x, y))
+            value_text = str(value)
+            value_image = self.small_font.render(value_text, True, TEXT)
+            while value_image.get_width() > value_space and len(value_text) > 6:
+                value_text = value_text[:-2]
+                value_image = self.small_font.render(value_text + "...", True, TEXT)
+            panel.blit(value_image, (value_right - value_image.get_width(), y))
+            y += line_height
+
+        hint_image = self.small_font.render(
+            "Press any key or click to close", True, MYCELIUM
+        )
+        panel.blit(hint_image, hint_image.get_rect(centerx=width // 2, bottom=height - 14))
+
+        panel.set_alpha(round(255 * fade))
+        self.screen.blit(panel, rect)
     def wrap_text(self, text, font, max_width):
         lines = []
         current = ""

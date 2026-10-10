@@ -4,3 +4,4 @@ __pycache__/
 AoM/build/
 dist/
 .DS_Store
+AoM/build_info.py

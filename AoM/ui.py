@@ -3,8 +3,9 @@ import pygame
 from config import *
 from entities import *
 from game_backed import GameBackedManager
-from game_platform import reload_with_framebuffer
+from game_platform import WEB_BUILD, browser_window, reload_with_framebuffer
 from utils import *
+from version_info import about_lines
 
 
 class UIManager(GameBackedManager):
@@ -107,7 +108,7 @@ class UIManager(GameBackedManager):
         elif key in (pygame.K_d, pygame.K_RIGHT) and not self.is_action_option(rows[self.options_selected]):
             self.change_option(self.options_selected, 1)
     def is_action_option(self, label):
-        return label in ("End Game", "Close")
+        return label in ("End Game", "Close", "About")
     def handle_title_key(self, key):
         if self.title_exiting:
             return True
@@ -165,6 +166,8 @@ class UIManager(GameBackedManager):
             self.sync_visual_quality()
         elif label == "Debug Overlay":
             self.debug_overlay = not self.debug_overlay
+        elif label == "About":
+            self.open_about()
         elif label == "End Game":
             self.request_confirmation("end_game")
         elif label == "Close":
@@ -212,6 +215,7 @@ class UIManager(GameBackedManager):
             "Smooth Scaling": "Use smoother scaling for browser and framebuffer output.",
             "FPS Cap": "Set the frame-rate target.",
             "End Game": "Return to the title screen after confirmation.",
+            "About": "Show build hash/time, Python, and package versions.",
             "Framebuffer:": "Choose browser resolution. Changes require reload.",
             "Close": "Close this menu.",
             "PRESET": "Preset options.",
@@ -246,6 +250,37 @@ class UIManager(GameBackedManager):
             self.options_open = False
             return True
         return False
+    def open_about(self):
+        self.about_lines = about_lines()
+        self.about_open = True
+        self.options_open = False
+        self._publish_about_debug(True)
+    def close_about(self):
+        if not self.about_open:
+            return False
+        self.about_open = False
+        self._publish_about_debug(False)
+        return True
+    def _publish_about_debug(self, opened):
+        """Expose About state to the browser for the smoke test (web only)."""
+        if not WEB_BUILD:
+            return
+        try:
+            window = browser_window()
+            if window is None:
+                return
+            window.__AOM_ABOUT_OPEN__ = bool(opened)
+            build_hash = next(
+                (value for label, value in self.about_lines if label == "Build"), ""
+            )
+            window.__AOM_BUILD_HASH__ = str(build_hash)
+        except Exception:
+            pass
+    def handle_about_click(self, pos):
+        if not self.about_open:
+            return False
+        self.close_about()
+        return True
     def request_confirmation(self, action, payload=None):
         self.confirm_action = action
         self.confirm_display_action = action
