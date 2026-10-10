@@ -6,9 +6,41 @@ import pygame
 from config import *
 from entities import *
 from game_backed import GameBackedManager
+from atlas import default_atlas_index
 
 
 class AssetManager(GameBackedManager):
+    def __init__(self, game):
+        super().__init__(game)
+        self.atlas_index = default_atlas_index()
+        self.spin_fps = {}
+
+    def _load_spin_frames(self, name, pattern):
+        """Load a collectible spin set from the packed atlas or its frame dir.
+
+        Atlas sets ship the reduced web-10fps frames; ``spin_fps`` records the
+        manifest playback rate so the renderer can keep the native spin
+        duration. Missing atlases and missing dirs both degrade to an empty
+        list (the renderer then falls back to its static icon path).
+        """
+        sprite_path = f"assets/sprites/collectibles/{name}_spin"
+        entry = self.atlas_index.entry(sprite_path)
+        if entry is not None:
+            frames = self.atlas_index.load_frames(sprite_path)
+            if frames:
+                self.spin_fps[name] = entry.get("profile_fps") or ITEM_SPIN_FPS
+                return frames
+        frame_dir = BASE_DIR / sprite_path
+        if not frame_dir.exists():
+            return []
+        frames = []
+        for path in sorted(frame_dir.glob(pattern)):
+            try:
+                frames.append(pygame.image.load(path).convert_alpha())
+            except pygame.error:
+                return []
+        return frames
+
     def get_font(self, size, bold=False, italic=False):
         key = (int(size), bool(bold), bool(italic))
         cached = self.font_cache.get(key)
@@ -58,16 +90,7 @@ class AssetManager(GameBackedManager):
             return None
         return pygame.transform.smoothscale(icon, (34, 34))
     def load_lumen_spin_frames(self):
-        frame_dir = BASE_DIR / "assets/sprites/collectibles/lumen_spin"
-        if not frame_dir.exists():
-            return []
-        frames = []
-        for path in sorted(frame_dir.glob("lumen_*.png")):
-            try:
-                frames.append(pygame.image.load(path).convert_alpha())
-            except pygame.error:
-                return []
-        return frames
+        return self._load_spin_frames("lumen", "lumen_*.png")
     def load_lumen_front_frame(self):
         path = BASE_DIR / "assets/sprites/collectibles/lumen_front/lumen_00.png"
         if not path.exists():
@@ -77,16 +100,7 @@ class AssetManager(GameBackedManager):
         except pygame.error:
             return []
     def load_root_spin_frames(self):
-        frame_dir = BASE_DIR / "assets/sprites/collectibles/root_spin"
-        if not frame_dir.exists():
-            return []
-        frames = []
-        for path in sorted(frame_dir.glob("root_*.png")):
-            try:
-                frames.append(pygame.image.load(path).convert_alpha())
-            except pygame.error:
-                return []
-        return frames
+        return self._load_spin_frames("root", "root_*.png")
     def load_root_icon(self):
         path = BASE_DIR / "assets/sprites/hud/root_icon.png"
         if not path.exists():
@@ -106,27 +120,9 @@ class AssetManager(GameBackedManager):
             return None
         return pygame.transform.smoothscale(icon, (36, 34))
     def load_crystal_spin_frames(self):
-        frame_dir = BASE_DIR / "assets/sprites/collectibles/crystal_spin"
-        if not frame_dir.exists():
-            return []
-        frames = []
-        for path in sorted(frame_dir.glob("crystal_*.png")):
-            try:
-                frames.append(pygame.image.load(path).convert_alpha())
-            except pygame.error:
-                return []
-        return frames
+        return self._load_spin_frames("crystal", "crystal_*.png")
     def load_shell_spin_frames(self):
-        frame_dir = BASE_DIR / "assets/sprites/collectibles/shell_spin"
-        if not frame_dir.exists():
-            return []
-        frames = []
-        for path in sorted(frame_dir.glob("shell_*.png")):
-            try:
-                frames.append(pygame.image.load(path).convert_alpha())
-            except pygame.error:
-                return []
-        return frames
+        return self._load_spin_frames("shell", "shell_*.png")
     def load_crystal_icon(self):
         path = BASE_DIR / "assets/sprites/hud/quartz_crystal.png"
         if not path.exists():
@@ -137,16 +133,7 @@ class AssetManager(GameBackedManager):
             return None
         return pygame.transform.smoothscale(icon, (28, 40))
     def load_acorn_spin_frames(self):
-        frame_dir = BASE_DIR / "assets/sprites/collectibles/acorn_spin"
-        if not frame_dir.exists():
-            return []
-        frames = []
-        for path in sorted(frame_dir.glob("acorn_*.png")):
-            try:
-                frames.append(pygame.image.load(path).convert_alpha())
-            except pygame.error:
-                return []
-        return frames
+        return self._load_spin_frames("acorn", "acorn_*.png")
     def load_acorn_icon(self):
         path = BASE_DIR / "assets/sprites/hud/acorn.png"
         if not path.exists():
@@ -157,16 +144,7 @@ class AssetManager(GameBackedManager):
             return None
         return pygame.transform.smoothscale(icon, (38, 34))
     def load_amber_spin_frames(self):
-        frame_dir = BASE_DIR / "assets/sprites/collectibles/amber_spin"
-        if not frame_dir.exists():
-            return []
-        frames = []
-        for path in sorted(frame_dir.glob("amber_*.png")):
-            try:
-                frames.append(pygame.image.load(path).convert_alpha())
-            except pygame.error:
-                return []
-        return frames
+        return self._load_spin_frames("amber", "amber_*.png")
     def load_amber_icon(self):
         path = BASE_DIR / "assets/sprites/hud/amber_shard.png"
         if not path.exists():

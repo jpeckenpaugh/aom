@@ -38,6 +38,13 @@ def effective_fps(fps):
     return WEB_FIXED_FPS if WEB_BUILD else fps
 
 
+# AOM-34: the web-10fps build ships packed grid atlases (tools/pack_web_atlas.py)
+# instead of per-frame PNG dirs. The loader consults ``assets/atlas/manifest.json``
+# only on the web build; native builds keep the source frame dirs and the
+# horizontal-strip fallback, so their frames and playback rate are unchanged.
+WEB_ATLAS_ENABLED = WEB_BUILD
+
+
 MENU_FADE_SECONDS = 1.0
 GAMEPLAY_FADE_SECONDS = 1.0
 TITLE_IN_BACKGROUND_FADE_SECONDS = 1.0

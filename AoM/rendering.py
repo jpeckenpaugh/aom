@@ -777,6 +777,7 @@ class Renderer(GameBackedManager):
                 "description": "A spiral shell with glassy facets, useful for focusing echoes and preserving delicate cave resonance.",
                 "icon": self.shell_icon,
                 "frames": self.shell_spin_frames,
+                "spin_fps": self.spin_fps.get("shell", ITEM_SPIN_FPS),
             },
             "acorn": {
                 "name": "Acorn",
@@ -784,6 +785,7 @@ class Renderer(GameBackedManager):
                 "description": "A compact seed of stored forest memory. Acorns carry patient energy for future growth.",
                 "icon": self.acorn_icon,
                 "frames": self.acorn_spin_frames,
+                "spin_fps": self.spin_fps.get("acorn", ITEM_SPIN_FPS),
             },
             "root": {
                 "name": "Root",
@@ -791,6 +793,7 @@ class Renderer(GameBackedManager):
                 "description": "A measure of established mycelial reach. Roots mark where the network has taken hold beneath the stone.",
                 "icon": self.root_icon,
                 "frames": self.root_spin_frames,
+                "spin_fps": self.spin_fps.get("root", ITEM_SPIN_FPS),
             },
             "crystal": {
                 "name": "Crystal",
@@ -806,6 +809,7 @@ class Renderer(GameBackedManager):
                 "description": "A warm shard of hardened sap, holding old sunlight in a mineral-like glow.",
                 "icon": self.amber_icon,
                 "frames": self.amber_spin_frames,
+                "spin_fps": self.spin_fps.get("amber", ITEM_SPIN_FPS),
             },
         }
         return details.get(item_key, details["lumen"])

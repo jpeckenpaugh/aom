@@ -1,5 +1,6 @@
 import pygame
 
+from atlas import default_atlas_index
 from config import *
 
 
@@ -68,12 +69,14 @@ class MushroomSprites:
 
     def __init__(self):
         self.animations = {}
+        self.animation_fps = {}
         self.variant_animations = {}
         self.classic_variant_animations = {}
         self.loaded_variant = "neutral"
         self.sprite_style = SPRITE_STYLE_OPTIONS[0]
         self.scale_cache = {}
         self.regen_sprites = []
+        self.atlas_index = default_atlas_index()
         self._load_species_animations(self.SPECIES_PREFIXES[self.sprite_style])
 
     @property
@@ -85,11 +88,14 @@ class MushroomSprites:
 
     def _load_species_animations(self, prefix):
         self.animations = {}
+        self.animation_fps = {}
         for folder in self.SPECIES_FOLDERS:
             name = f"{prefix}_{folder}_frames"
-            frames = self.load_frames(name)
+            frames, atlas_fps = self.frame_set(name)
             if frames:
                 self.animations[folder] = frames
+                if atlas_fps:
+                    self.animation_fps[folder] = atlas_fps
         self._load_regen_sprites(prefix)
 
     def _load_regen_sprites(self, prefix):
@@ -141,6 +147,24 @@ class MushroomSprites:
                 return
 
     def load_frames(self, base_name):
+        frames, _ = self.frame_set(base_name)
+        return frames
+
+    def frame_set(self, base_name):
+        """Return ``(frames, atlas_fps)`` for ``base_name``.
+
+        ``atlas_fps`` is the packed-web-10fps playback rate when the frames came
+        from an atlas (``None`` otherwise, where the caller keeps the animation
+        meta fps). Atlas frames already account for the walk-frame halving, so
+        the ``frames[::2]`` step is only applied on the directory fallback.
+        """
+        for candidate in (f"assets/sprites/{base_name}", f"assets/sprites/{base_name}_frames"):
+            entry = self.atlas_index.entry(candidate)
+            if entry is not None:
+                frames = self.atlas_index.load_frames(candidate)
+                if frames:
+                    return frames, entry.get("profile_fps")
+
         frame_dir = BASE_DIR / f"assets/sprites/{base_name}"
         if not frame_dir.exists():
             frame_dir = BASE_DIR / f"assets/sprites/{base_name}_frames"
@@ -149,11 +173,11 @@ class MushroomSprites:
             if frames:
                 if "walk" in base_name:
                     frames = frames[::2]
-                return frames
+                return frames, None
 
         sheet_path = BASE_DIR / f"assets/sprites/{base_name}.png"
         if not sheet_path.exists():
-            return []
+            return [], None
         sheet = pygame.image.load(sheet_path).convert_alpha()
         width, height = sheet.get_size()
         frame_count = width // self.FRAME_SIZE
@@ -163,9 +187,10 @@ class MushroomSprites:
             frame = pygame.Surface((self.FRAME_SIZE, height), pygame.SRCALPHA)
             frame.blit(sheet, (0, 0), rect)
             frames.append(frame)
-        return frames
+        return frames, None
 
     def frame_index(self, name, time, fps=None, variant=None, progress=None):
+        atlas_key = None
         if self.sprite_style == "Classic":
             classic_animation = self.CLASSIC_ANIMATION_MAP.get(name, "idle")
             animations = self.load_classic_variant(variant)
@@ -174,14 +199,19 @@ class MushroomSprites:
             frames = animations.get(classic_animation) or animations.get("idle")
             meta = self.CLASSIC_ANIMATION_META.get(classic_animation, self.CLASSIC_ANIMATION_META["idle"])
         else:
-            frames = self.animations.get(name) or self.animations.get("idle")
-            meta = self.ANIMATION_META.get(name, self.ANIMATION_META["idle"])
+            frames = self.animations.get(name)
+            atlas_key = name
+            if not frames:
+                frames = self.animations.get("idle")
+                atlas_key = "idle"
+            meta = self.ANIMATION_META.get(atlas_key, self.ANIMATION_META["idle"])
         if not frames:
             return None, None
         if progress is not None:
             index = round(max(0.0, min(1.0, progress)) * (len(frames) - 1))
         else:
-            fps = fps or meta["fps"]
+            atlas_fps = self.animation_fps.get(atlas_key) if atlas_key else None
+            fps = fps or atlas_fps or meta["fps"]
             index = int(time * fps)
             if meta.get("loop", True):
                 index %= len(frames)
