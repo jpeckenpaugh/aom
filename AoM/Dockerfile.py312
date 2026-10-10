@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /workspace
+
+COPY requirements.txt /tmp/requirements.txt
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install pygbag==0.9.3 \
+    && python -m pip install -r /tmp/requirements.txt \
+    && python - <<'PY'
+from pathlib import Path
+import pygbag.app
+
+path = Path(pygbag.app.__file__)
+source = path.read_text()
+source = source.replace(
+    '"proxy": f"http://{args.bind}:{args.port}/",',
+    '"proxy": f"http://127.0.0.1:{args.port}/",',
+)
+path.write_text(source)
+PY
+
+WORKDIR /workspace/AoM
+
+EXPOSE 8001
+
+CMD ["python", "-m", "pygbag", "--template", "default-browserfs.tmpl", "--PYBUILD", "3.12", "--width", "1280", "--height", "720", "--bind", "0.0.0.0", "--port", "8001", "."]

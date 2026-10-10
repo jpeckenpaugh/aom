@@ -1,0 +1,61 @@
+name: Build and deploy AoM web demo to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned build env (pygbag 0.9.3)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygbag==0.9.3 -r requirements.txt
+
+      - name: Build pygbag web bundle
+        working-directory: AoM
+        run: |
+          python -m pygbag --build \
+            --template default-browserfs.tmpl \
+            --PYBUILD 3.12 --width 1280 --height 720 .
+
+      - name: Verify build output
+        run: |
+          test -f AoM/build/web/index.html
+          test -f AoM/build/web/aom.tar.gz
+          ls -la AoM/build/web
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: AoM/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
