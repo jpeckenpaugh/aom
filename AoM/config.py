@@ -25,6 +25,19 @@ SCREEN_HEIGHT = FRAMEBUFFER_OPTIONS[FRAMEBUFFER_KEY][2]
 FPS = 60
 BROWSER_FPS = 30
 BROWSER_FPS_OPTIONS = (10, 30, 60)
+WEB_FIXED_FPS = 10
+
+
+def effective_fps(fps):
+    """Resolve a requested frame cap for the current build.
+
+    The web (PygBag) build ships the reduced 10 fps frame set, so it is pinned to
+    ``WEB_FIXED_FPS`` regardless of the requested value; native builds keep the
+    requested cap.
+    """
+    return WEB_FIXED_FPS if WEB_BUILD else fps
+
+
 MENU_FADE_SECONDS = 1.0
 GAMEPLAY_FADE_SECONDS = 1.0
 TITLE_IN_BACKGROUND_FADE_SECONDS = 1.0
@@ -71,8 +84,9 @@ BACKGROUND_ZOOM_BUCKET = 0.005
 WORLD_CULL_MARGIN = 240
 NPC_ANIMATION_FPS = 30
 FRAMEBUFFER_OPTIONS_ROWS = ("Framebuffer:",) if WEB_BUILD else ()
+FPS_OPTIONS_ROWS = () if WEB_BUILD else ("FPS Cap",)
 BACK_OPTIONS_ROWS = ("Close",)
-GRAPHICS_OPTIONS_ROWS = ("FPS Cap", "Darkness Overlay", "Smooth Scaling", "Sprite Style") + FRAMEBUFFER_OPTIONS_ROWS
+GRAPHICS_OPTIONS_ROWS = FPS_OPTIONS_ROWS + ("Darkness Overlay", "Smooth Scaling", "Sprite Style") + FRAMEBUFFER_OPTIONS_ROWS
 TITLE_OPTIONS_ROWS = (
     "PRESET",
     "Preset",

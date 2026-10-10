@@ -30,7 +30,7 @@ class UIManager(GameBackedManager):
     def apply_visual_quality(self, quality):
         self.visual_quality = quality
         preset = PRESETS[quality]
-        self.browser_fps_cap = preset["fps"]
+        self.browser_fps_cap = effective_fps(preset["fps"])
         self.darkness_overlay_enabled = preset["darkness"]
         self.smooth_scaling_enabled = preset["smooth_scaling"]
         self.sprites.set_style(preset["sprite_style"])
@@ -49,7 +49,7 @@ class UIManager(GameBackedManager):
             if WEB_BUILD:
                 framebuffer_matches = self.framebuffer_key == preset["framebuffer"]
             if (
-                self.browser_fps_cap == preset["fps"]
+                self.browser_fps_cap == effective_fps(preset["fps"])
                 and self.darkness_overlay_enabled == preset["darkness"]
                 and self.smooth_scaling_enabled == preset["smooth_scaling"]
                 and self.sprites.sprite_style == preset["sprite_style"]
@@ -159,7 +159,7 @@ class UIManager(GameBackedManager):
             self.sync_visual_quality()
             self.world_image_cache.clear()
             self.background_cache.clear()
-        elif label == "FPS Cap":
+        elif label == "FPS Cap" and not WEB_BUILD:
             current = self.browser_fps_cap if self.browser_fps_cap in BROWSER_FPS_OPTIONS else BROWSER_FPS
             next_index = (BROWSER_FPS_OPTIONS.index(current) + direction) % len(BROWSER_FPS_OPTIONS)
             self.browser_fps_cap = BROWSER_FPS_OPTIONS[next_index]
@@ -196,7 +196,7 @@ class UIManager(GameBackedManager):
         if label == "Smooth Scaling":
             return "On" if self.smooth_scaling_enabled else "Off"
         if label == "FPS Cap":
-            return str(self.browser_fps_cap)
+            return str(effective_fps(self.browser_fps_cap))
         if label == "Debug Overlay":
             return "On" if self.debug_overlay else "Off"
         return ""
