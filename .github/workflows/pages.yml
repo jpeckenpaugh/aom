@@ -21,10 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install pinned build env (pygbag 0.9.3)
         run: |
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m pygbag --build \
             --template default-browserfs.tmpl \
-            --PYBUILD 3.12 --width 1280 --height 720 .
+            --PYBUILD 3.14 --width 1280 --height 720 .
 
       - name: Verify build output
         run: |
