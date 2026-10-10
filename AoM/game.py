@@ -519,6 +519,7 @@ class Game:
         self.lumens = self.make_lumens()
         self.resources = ResourceState()
         self.progress = GameProgress()
+        self.time_scale = TIME_SPEED_DEFAULT
         self.pending_encounter = None
         self.encounter_timer = 0.0
         self.encounter_cooldown = 0.0

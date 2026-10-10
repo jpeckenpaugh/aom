@@ -261,7 +261,8 @@ class InputHandler(GameBackedManager):
                     self.force_win_current_encounter()
                 elif event.key == pygame.K_F9:
                     self.note_manual_activity(stop_auto=False)
-                    self.cycle_time_scale()
+                    direction = -1 if getattr(event, "mod", 0) & pygame.KMOD_SHIFT else 1
+                    self.cycle_time_scale(direction)
                 elif event.key == pygame.K_c:
                     self.note_manual_activity()
                     self.cheat_advance_phase()
