@@ -39,12 +39,12 @@ async def custom_site():
     # unpack filesystem from compressed archive into work dir
     if platform.window.location.host.find('.itch.zone')>0:
         import zipfile
-        async with platform.fopen("{{cookiecutter.archive}}.apk", "rb") as archive:
+        async with platform.fopen("{{cookiecutter.archive}}.apk?b=__AOM_BUILD_ID__", "rb") as archive:
             with zipfile.ZipFile(archive) as zip_ref:
                 zip_ref.extractall(appdir.as_posix())
     else:
         import tarfile
-        async with platform.fopen("{{cookiecutter.archive}}.tar.gz", "rb") as archive:
+        async with platform.fopen("{{cookiecutter.archive}}.tar.gz?b=__AOM_BUILD_ID__", "rb") as archive:
             tar = tarfile.open(fileobj=archive, mode="r:gz")
             tar.extractall(path=appdir.as_posix(), filter='tar')
             tar.close()
@@ -162,6 +162,8 @@ config = {
     fb_width : "{{cookiecutter.width}}",
     fb_height : "{{cookiecutter.height}}"
 }
+
+window["__AOM_" + "BUILD_ID__"] = "__AOM_BUILD_ID__";
 
 function show_infobox() {
     infobox.style.display = "block";
@@ -305,7 +307,7 @@ function mushFramebufferConfig() {
     <meta name="apple-mobile-web-app-capable" content="yes"/>
 
 
-    <link rel="icon" type="image/png" href="favicon.png" sizes="16x16">
+    <link rel="icon" type="image/png" href="favicon.png?b=__AOM_BUILD_ID__" sizes="16x16">
 
     <style>
         #status {

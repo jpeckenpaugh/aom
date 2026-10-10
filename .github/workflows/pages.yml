@@ -21,10 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.14
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Install pinned build env (pygbag 0.9.3)
         run: |
@@ -36,7 +36,21 @@ jobs:
         run: |
           python -m pygbag --build \
             --template default-browserfs.tmpl \
-            --PYBUILD 3.14 --width 1280 --height 720 .
+            --PYBUILD 3.12 --width 1280 --height 720 .
+
+      - name: Stamp cache-busting build id into index.html
+        run: |
+          BUILD_ID="${GITHUB_SHA:0:12}"
+          if [ -z "$BUILD_ID" ]; then
+            BUILD_ID="$(date +%s)"
+          fi
+          sed -i "s/__AOM_BUILD_ID__/${BUILD_ID}/g" AoM/build/web/index.html
+          if grep -q "__AOM_BUILD_ID__" AoM/build/web/index.html; then
+            echo "::error::__AOM_BUILD_ID__ placeholder remains in AoM/build/web/index.html"
+            exit 1
+          fi
+          grep -o 'aom\.tar\.gz?b=[0-9a-f]\{12\}' AoM/build/web/index.html
+          echo "Stamped build id: $BUILD_ID"
 
       - name: Verify build output
         run: |
