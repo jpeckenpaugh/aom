@@ -154,6 +154,10 @@ class Game:
         self.options_tooltip_fade = 1.0
         self.options_button_rect = pygame.Rect(0, 0, 0, 0)
         self.options_row_rects = []
+        self.about_open = False
+        self.about_fade = 0.0
+        self.about_lines = []
+        self.about_rect = pygame.Rect(0, 0, 0, 0)
         self.title_screen = True
         self.title_transition_time = 0.0
         self.title_exiting = False
@@ -419,6 +423,9 @@ class Game:
         self.options_tooltip_text = ""
         self.options_tooltip_previous = ""
         self.options_tooltip_fade = 1.0
+        self.about_open = False
+        self.about_fade = 0.0
+        self.about_lines = []
         self.confirm_action = None
         self.confirm_display_action = None
         self.confirm_payload = None
@@ -573,6 +580,11 @@ class Game:
             self.confirm_fade = max(target_confirm_fade, self.confirm_fade - fade_step)
             if self.confirm_fade <= 0:
                 self.confirm_display_action = None
+        target_about_fade = 1.0 if self.about_open else 0.0
+        if self.about_fade < target_about_fade:
+            self.about_fade = min(target_about_fade, self.about_fade + fade_step)
+        elif self.about_fade > target_about_fade:
+            self.about_fade = max(target_about_fade, self.about_fade - fade_step)
         tooltip_step = dt / TOOLTIP_FADE_SECONDS
         if self.options_tooltip_fade < 1.0:
             self.options_tooltip_fade = min(1.0, self.options_tooltip_fade + tooltip_step)

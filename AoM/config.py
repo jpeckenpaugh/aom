@@ -80,6 +80,7 @@ TITLE_OPTIONS_ROWS = (
     *GRAPHICS_OPTIONS_ROWS,
     "TOOLS",
     "Debug Overlay",
+    "About",
     "",
     *BACK_OPTIONS_ROWS,
 )
@@ -92,6 +93,7 @@ GAME_OPTIONS_ROWS = (
     "Auto Play",
     "TOOLS",
     "Debug Overlay",
+    "About",
     "SYSTEM",
     "End Game",
     *BACK_OPTIONS_ROWS,

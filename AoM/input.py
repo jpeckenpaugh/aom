@@ -67,7 +67,9 @@ class InputHandler(GameBackedManager):
                 int(self.browser_click_value(click, "x")),
                 int(self.browser_click_value(click, "y")),
             )
-            if self.handle_confirmation_click(pos):
+            if self.handle_about_click(pos):
+                handled = True
+            elif self.handle_confirmation_click(pos):
                 handled = True
             elif self.handle_item_drawer_click(pos):
                 handled = True
@@ -225,7 +227,10 @@ class InputHandler(GameBackedManager):
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if self.confirm_action is not None:
+                if self.about_open:
+                    self.note_manual_activity(stop_auto=False)
+                    self.close_about()
+                elif self.confirm_action is not None:
                     self.handle_confirmation_key(event.key)
                 elif self.item_drawer_visible and event.key == pygame.K_ESCAPE:
                     self.note_manual_activity(stop_auto=False)
@@ -287,6 +292,8 @@ class InputHandler(GameBackedManager):
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 saw_mouse_event = True
                 if WEB_BUILD:
+                    continue
+                if self.handle_about_click(event.pos):
                     continue
                 if self.handle_confirmation_click(event.pos):
                     continue

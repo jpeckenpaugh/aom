@@ -31,6 +31,18 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pygbag==0.9.3 -r requirements.txt
 
+      - name: Write build info (hash/time for the About screen)
+        run: |
+          HASH="${GITHUB_SHA:0:12}"
+          [ -z "$HASH" ] && HASH="unknown"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          {
+            echo '"""Generated build stamp. Do not edit or commit."""'
+            echo "BUILD_HASH = \"${HASH}\""
+            echo "BUILD_TIME = \"${BUILD_TIME}\""
+          } > AoM/build_info.py
+          cat AoM/build_info.py
+
       - name: Build pygbag web bundle
         working-directory: AoM
         run: |
