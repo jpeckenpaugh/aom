@@ -22,6 +22,11 @@ deploys the generated `web/` output to GitHub Pages via
 The large `aom.tar.gz` bundle is produced in CI and deployed as a Pages artifact;
 it is **never committed to git**. See ADR-002 for the decision record.
 
+## Contributing
+
+Contributions land directly on `main` (auto-deploys to Pages): push changes straight to
+`origin main` — there is no review/PR gate, and a change is not done until the deploy is live.
+
 ## Local build
 
 ```bash
